@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "shakar0406@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidAppeal(data) {
+      return data.client_name is string && data.client_name.size() > 0 && data.client_name.size() < 100 &&
+             data.client_phone is string && data.client_phone.size() > 0 &&
+             data.complaint_text is string && data.complaint_text.size() > 0 && data.complaint_text.size() < 5000;
+    }
+
+    function isValidUser(data) {
+      return data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'operator', 'manager', 'analyst'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'operator' || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
+      allow delete: if isAdmin();
+    }
+
+    match /appeals/{appealId} {
+      // Public can create appeals (for the public form)
+      allow create: if isValidAppeal(request.resource.data);
+      // Only staff can read and update
+      allow read, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /scripts/{scriptId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager');
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Audit logs are immutable
+    }
+  }
+}

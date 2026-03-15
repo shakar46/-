@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "Appeal": {
+      "title": "Appeal",
+      "description": "A customer complaint or request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "client_name": { "type": "string" },
+        "client_phone": { "type": "string" },
+        "complaint_text": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "order_date": { "type": "string", "format": "date-time" },
+        "branch_name": { "type": "string" },
+        "product_employee": { "type": "string" },
+        "complaint_classification": { "type": "string" },
+        "classification_section": { "type": "string" },
+        "adjective_comment": { "type": "string" },
+        "status": { "type": "string", "enum": ["Новый", "В работе", "Выполнен", "Отклонен"] },
+        "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "responsible_person": { "type": "string" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "root_cause_analysis": { "type": "string" },
+        "corrective_actions": { "type": "string" },
+        "order_receipt": { "type": "string" },
+        "sip_link": { "type": "string" },
+        "photo_url": { "type": "string" },
+        "accepted_by": { "type": "string" }
+      },
+      "required": ["client_name", "client_phone", "complaint_text", "created_at"]
+    },
+    "User": {
+      "title": "User",
+      "description": "CRM Staff member",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "operator", "manager", "analyst"] }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Script": {
+      "title": "Script",
+      "description": "Operator script",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "phrase": { "type": "string" },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["phrase", "description"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "System settings including Telegram integration",
+      "type": "object",
+      "properties": {
+        "telegram_token": { "type": "string" },
+        "telegram_chat_id": { "type": "string" },
+        "notifications_enabled": { "type": "boolean" },
+        "google_sheets_url": { "type": "string" }
+      }
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Record of changes in the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "user_name": { "type": "string" },
+        "action": { "type": "string" },
+        "target_id": { "type": "string" },
+        "target_type": { "type": "string" },
+        "changes": { "type": "object" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/appeals": {
+      "schema": "Appeal",
+      "description": "Collection of customer appeals"
+    },
+    "/users": {
+      "schema": "User",
+      "description": "Collection of CRM users"
+    },
+    "/scripts": {
+      "schema": "Script",
+      "description": "Collection of operator scripts"
+    },
+    "/settings": {
+      "schema": "Settings",
+      "description": "Global system settings"
+    },
+    "/audit_logs": {
+      "schema": "AuditLog",
+      "description": "Audit trail"
+    }
+  }
+}
