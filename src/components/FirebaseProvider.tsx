@@ -36,8 +36,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const role = firebaseUser.email === "shakar0406@gmail.com" ? "admin" : "operator";
           await setDoc(doc(db, 'users', firebaseUser.uid), {
             uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
+            email: firebaseUser.email || null,
+            displayName: firebaseUser.displayName || "Anonymous User",
             role: role
           });
           setUserRole(role);

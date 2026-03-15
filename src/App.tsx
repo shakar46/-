@@ -29,7 +29,7 @@ import { twMerge } from "tailwind-merge";
 import { FirebaseProvider, useFirebase } from "./components/FirebaseProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { auth } from "./firebase";
-import { signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
+import { signInWithPopup, GoogleAuthProvider, signOut, signInAnonymously } from "firebase/auth";
 
 // Pages
 import Dashboard from "./pages/Dashboard";
@@ -41,6 +41,7 @@ import RepeatingAppeals from "./pages/RepeatingAppeals";
 import GoogleSheetsView from "./pages/GoogleSheetsView";
 import TelegramSettings from "./pages/TelegramSettings";
 import QuickAppeal from "./pages/QuickAppeal";
+import Scripts from "./pages/Scripts";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -94,16 +95,35 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/settings", icon: Settings, label: "Настройки" },
   ];
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loginData.username === "shakar46" && loginData.password === "uzsh1973") {
-      setIsAuthenticated(true);
-      localStorage.setItem("crm_auth", "true");
-      setLoginError(false);
+      try {
+        await signInAnonymously(auth);
+        setIsAuthenticated(true);
+        localStorage.setItem("crm_auth", "true");
+        setLoginError(false);
+      } catch (error) {
+        console.error("Error signing in anonymously:", error);
+        setLoginError(true);
+      }
     } else {
       setLoginError(true);
     }
   };
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (localStorage.getItem("crm_auth") === "true" && !auth.currentUser) {
+        try {
+          await signInAnonymously(auth);
+        } catch (error) {
+          console.error("Error auto-signing in anonymously:", error);
+        }
+      }
+    };
+    checkAuth();
+  }, []);
 
   const handleLogout = () => {
     setIsAuthenticated(false);
@@ -288,6 +308,7 @@ export default function App() {
               <Route path="/google-sheets" element={<GoogleSheetsView />} />
               <Route path="/settings" element={<TelegramSettings />} />
               <Route path="/quick-appeal" element={<QuickAppeal />} />
+              <Route path="/scripts" element={<Scripts />} />
               <Route path="/form" element={<PublicForm />} />
             </Routes>
           </Layout>
