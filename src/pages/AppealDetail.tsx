@@ -17,7 +17,11 @@ import {
   Link as LinkIcon,
   Image as ImageIcon,
   AlertCircle,
-  History
+  History,
+  Zap,
+  SortAsc,
+  SortDesc,
+  ChevronRight
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -215,6 +219,10 @@ export default function AppealDetail() {
     complaint_photos: []
   });
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [scripts, setScripts] = useState<any[]>([]);
+  const [isQuickReplyOpen, setIsQuickReplyOpen] = useState(false);
+  const [scriptSearch, setScriptSearch] = useState("");
+  const [historySortOrder, setHistorySortOrder] = useState<'asc' | 'desc'>('desc');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
@@ -232,6 +240,7 @@ export default function AppealDetail() {
         if (docSnap.exists()) {
           setAppeal({ id: docSnap.id, ...docSnap.data() } as Appeal);
           fetchAuditLogs();
+          fetchScripts();
         }
       } catch (error) {
         handleFirestoreError(error, OperationType.GET, `appeals/${id}`);
@@ -240,6 +249,16 @@ export default function AppealDetail() {
     };
     fetchAppeal();
   }, [id]);
+
+  const fetchScripts = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "scripts"));
+      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setScripts(data);
+    } catch (error) {
+      console.error("Error fetching scripts:", error);
+    }
+  };
 
   const fetchAuditLogs = async () => {
     try {
@@ -275,8 +294,8 @@ export default function AppealDetail() {
       // Add audit log
       await addDoc(collection(db, "audit_logs"), {
         appeal_id: appealId,
-        user_id: user?.uid,
-        user_name: user?.displayName,
+        user_id: user?.uid || "system",
+        user_name: user?.displayName || "shakar46",
         action: isNew ? "Создание обращения" : "Обновление обращения",
         timestamp: new Date().toISOString()
       });
@@ -387,7 +406,16 @@ export default function AppealDetail() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Текст обращения</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest">Текст обращения</label>
+                <button 
+                  onClick={() => setIsQuickReplyOpen(true)}
+                  className="flex items-center gap-1.5 text-[10px] font-bold text-black bg-zinc-100 hover:bg-zinc-200 px-2 py-1 rounded-lg transition-colors"
+                >
+                  <Zap size={12} />
+                  Быстрый ответ
+                </button>
+              </div>
               <textarea 
                 rows={4}
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all resize-none"
@@ -399,7 +427,7 @@ export default function AppealDetail() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Autocomplete 
                 label="Классификация жалобы" 
-                value={appeal.complaint_classification}
+                value={appeal.complaint_classification || ""}
                 options={COMPLAINT_CLASSIFICATIONS}
                 onChange={(val: string) => setAppeal({...appeal, complaint_classification: val})}
               />
@@ -433,13 +461,13 @@ export default function AppealDetail() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Autocomplete 
                 label="Название филиала"
-                value={appeal.branch_name}
+                value={appeal.branch_name || ""}
                 options={BRANCH_NAMES}
                 onChange={(val: string) => setAppeal({...appeal, branch_name: val})}
               />
               <Autocomplete 
                 label="Источник"
-                value={appeal.source}
+                value={appeal.source || ""}
                 options={SOURCES}
                 onChange={(val: string) => setAppeal({...appeal, source: val})}
               />
@@ -520,17 +548,28 @@ export default function AppealDetail() {
               <AlertCircle size={20} className="text-zinc-400" /> Анализ и Решение
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Дата выполнения (Deadline)</label>
+                <input 
+                  type="date"
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
+                  value={appeal.completion_date || ""}
+                  onChange={(e) => setAppeal({...appeal, completion_date: e.target.value})}
+                />
+              </div>
               <Autocomplete 
-                label="Статус для отдела мотивации"
-                value={appeal.motivation_status}
-                options={MOTIVATION_STATUSES}
-                onChange={(val: string) => setAppeal({...appeal, motivation_status: val})}
-              />
-              <Autocomplete 
-                label="Срок устранения"
-                value={appeal.deadline}
+                label="Статус дедлайна"
+                value={appeal.deadline || ""}
                 options={DEADLINE_STATUSES}
                 onChange={(val: string) => setAppeal({...appeal, deadline: val})}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Autocomplete 
+                label="Статус для отдела мотивации"
+                value={appeal.motivation_status || ""}
+                options={MOTIVATION_STATUSES}
+                onChange={(val: string) => setAppeal({...appeal, motivation_status: val})}
               />
             </div>
             <div>
@@ -563,7 +602,7 @@ export default function AppealDetail() {
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Текущий статус</label>
                 <select 
                   className="w-full bg-zinc-900 text-white border-none rounded-xl px-4 py-3 text-sm font-bold focus:ring-0 cursor-pointer"
-                  value={appeal.status}
+                  value={appeal.status || "Новый"}
                   onChange={(e) => setAppeal({...appeal, status: e.target.value})}
                 >
                   <option>Новый</option>
@@ -583,21 +622,38 @@ export default function AppealDetail() {
           </section>
 
           <section className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <History size={20} className="text-zinc-400" /> История изменений
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <History size={20} className="text-zinc-400" /> История изменений
+              </h2>
+              <button 
+                onClick={() => setHistorySortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                className="p-2 hover:bg-zinc-50 rounded-lg transition-colors text-zinc-400"
+                title={historySortOrder === 'asc' ? "Сначала новые" : "Сначала старые"}
+              >
+                {historySortOrder === 'asc' ? <SortAsc size={18} /> : <SortDesc size={18} />}
+              </button>
+            </div>
             <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
               {auditLogs.length === 0 ? (
                 <p className="text-xs text-zinc-400 italic">История пуста</p>
               ) : (
-                auditLogs.map((log) => (
-                  <div key={log.id} className="relative pl-4 border-l border-zinc-100 pb-4 last:pb-0">
-                    <div className="absolute left-[-5px] top-0 w-2 h-2 rounded-full bg-zinc-300" />
-                    <p className="text-xs font-bold text-zinc-900">{log.action}</p>
-                    <p className="text-[10px] text-zinc-400">{log.user_name || "Система"}</p>
-                    <p className="text-[10px] text-zinc-400 mt-1">{format(new Date(log.timestamp), "d MMM, HH:mm", { locale: ru })}</p>
-                  </div>
-                ))
+                auditLogs
+                  .sort((a, b) => {
+                    const dateA = new Date(a.timestamp).getTime();
+                    const dateB = new Date(b.timestamp).getTime();
+                    return historySortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+                  })
+                  .map((log) => (
+                    <div key={log.id} className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-bold text-zinc-900">{log.action}</p>
+                        <p className="text-[10px] text-zinc-400">{format(new Date(log.timestamp), "d MMM, HH:mm", { locale: ru })}</p>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 font-medium">Автор: {log.user_name || "Система"}</p>
+                      {log.changes && <p className="text-[10px] text-zinc-400 italic">{log.changes}</p>}
+                    </div>
+                  ))
               )}
             </div>
           </section>
@@ -654,6 +710,76 @@ export default function AppealDetail() {
             {saveStatus === "success" ? <Check size={20} /> : <AlertCircle size={20} />}
             {saveStatus === "success" ? "Обращение сохранено" : "Не получилось сохранить"}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isQuickReplyOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsQuickReplyOpen(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-white rounded-[2.5rem] max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="p-8 border-b border-zinc-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold">Быстрый ответ</h3>
+                  <p className="text-sm text-zinc-500">Выберите скрипт для вставки в текст обращения</p>
+                </div>
+                <button onClick={() => setIsQuickReplyOpen(false)} className="p-2 hover:bg-zinc-50 rounded-xl transition-all">
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 border-b border-zinc-100">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                  <input 
+                    type="text"
+                    placeholder="Поиск по скриптам..."
+                    value={scriptSearch}
+                    onChange={(e) => setScriptSearch(e.target.value)}
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl pl-12 pr-4 py-3 text-sm focus:ring-4 focus:ring-black/5 focus:border-black outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                {scripts
+                  .filter(s => s.title.toLowerCase().includes(scriptSearch.toLowerCase()) || s.content.toLowerCase().includes(scriptSearch.toLowerCase()))
+                  .map(script => (
+                    <button
+                      key={script.id}
+                      onClick={() => {
+                        setAppeal({ ...appeal!, complaint_text: (appeal?.complaint_text ? appeal.complaint_text + '\n' : '') + script.content });
+                        setIsQuickReplyOpen(false);
+                      }}
+                      className="w-full text-left p-5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-100 rounded-2xl transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{script.category}</span>
+                        <ChevronRight size={14} className="text-zinc-300 group-hover:text-black transition-colors" />
+                      </div>
+                      <h4 className="font-bold text-black mb-1">{script.title}</h4>
+                      <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">{script.content}</p>
+                    </button>
+                  ))}
+                {scripts.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-sm text-zinc-400">Скрипты не найдены</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

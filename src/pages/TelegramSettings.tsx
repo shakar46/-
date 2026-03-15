@@ -109,7 +109,7 @@ export default function TelegramSettings() {
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Токен бота (Bot Token)</label>
                 <input
                   type="password"
-                  value={settings.telegram_token}
+                  value={settings.telegram_token || ""}
                   onChange={(e) => setSettings({ ...settings, telegram_token: e.target.value })}
                   placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
@@ -121,7 +121,7 @@ export default function TelegramSettings() {
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">ID чата (Chat ID)</label>
                 <input
                   type="text"
-                  value={settings.telegram_chat_id}
+                  value={settings.telegram_chat_id || ""}
                   onChange={(e) => setSettings({ ...settings, telegram_chat_id: e.target.value })}
                   placeholder="-100123456789"
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
@@ -133,7 +133,7 @@ export default function TelegramSettings() {
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Ссылка на Google Таблицу</label>
                 <input
                   type="text"
-                  value={settings.google_spreadsheet_url}
+                  value={settings.google_spreadsheet_url || ""}
                   onChange={(e) => setSettings({ ...settings, google_spreadsheet_url: e.target.value })}
                   placeholder="https://docs.google.com/spreadsheets/d/..."
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"

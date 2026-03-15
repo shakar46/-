@@ -78,7 +78,10 @@ const SidebarItem = ({ to, icon: Icon, label, active }: SidebarItemProps) => (
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, userRole, loading } = useFirebase();
+  const { user, userRole, loading: firebaseLoading } = useFirebase();
+  const [isAuthenticated, setIsAuthenticated] = useState(localStorage.getItem("crm_auth") === "true");
+  const [loginData, setLoginData] = useState({ username: "", password: "" });
+  const [loginError, setLoginError] = useState(false);
 
   const menuItems = [
     { to: "/", icon: LayoutDashboard, label: "Главная" },
@@ -86,20 +89,29 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/quick-appeal", icon: Plus, label: "Новое обращение" },
     { to: "/repeating", icon: Users, label: "Повторные жалобы" },
     { to: "/analytics", icon: BarChart3, label: "Аналитика" },
+    { to: "/scripts", icon: FileText, label: "Скрипты" },
     { to: "/google-sheets", icon: Table, label: "Google Таблица" },
     { to: "/settings", icon: Settings, label: "Настройки" },
   ];
 
-  const handleLogin = () => {
-    const provider = new GoogleAuthProvider();
-    signInWithPopup(auth, provider);
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginData.username === "shakar46" && loginData.password === "uzsh1973") {
+      setIsAuthenticated(true);
+      localStorage.setItem("crm_auth", "true");
+      setLoginError(false);
+    } else {
+      setLoginError(true);
+    }
   };
 
   const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem("crm_auth");
     signOut(auth);
   };
 
-  if (loading) {
+  if (firebaseLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50">
         <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin" />
@@ -107,23 +119,55 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (!user && location.pathname !== "/form") {
+  if (!isAuthenticated && location.pathname !== "/form") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl border border-zinc-200 p-10 shadow-xl text-center">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-md w-full bg-white rounded-[2.5rem] border border-zinc-200 p-10 shadow-2xl text-center"
+        >
           <div className="w-16 h-16 bg-black rounded-2xl flex items-center justify-center mx-auto mb-8">
             <span className="text-white font-bold text-3xl">Ш</span>
           </div>
-          <h2 className="text-3xl font-bold mb-4 tracking-tight">Добро пожаловать</h2>
-          <p className="text-zinc-500 mb-8">Пожалуйста, войдите в систему, чтобы продолжить работу с CRM Шакарочка.</p>
-          <button
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-black text-white py-4 rounded-2xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10"
-          >
-            <LogIn size={20} />
-            Войти через Google
-          </button>
-        </div>
+          <h2 className="text-3xl font-bold mb-4 tracking-tight">Вход в систему</h2>
+          <p className="text-zinc-500 mb-8">Введите данные для доступа к CRM Шакарочка.</p>
+          
+          <form onSubmit={handleLogin} className="space-y-4 text-left">
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 ml-1">Логин</label>
+              <input 
+                type="text"
+                value={loginData.username}
+                onChange={(e) => setLoginData({...loginData, username: e.target.value})}
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-black/5 focus:border-black outline-none transition-all"
+                placeholder="Введите логин"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 ml-1">Пароль</label>
+              <input 
+                type="password"
+                value={loginData.password}
+                onChange={(e) => setLoginData({...loginData, password: e.target.value})}
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-black/5 focus:border-black outline-none transition-all"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+            {loginError && (
+              <p className="text-rose-500 text-xs font-bold text-center">Неверный логин или пароль</p>
+            )}
+            <button
+              type="submit"
+              className="w-full flex items-center justify-center gap-3 bg-black text-white py-4 rounded-2xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10 mt-4"
+            >
+              <LogIn size={20} />
+              Войти
+            </button>
+          </form>
+        </motion.div>
       </div>
     );
   }
@@ -161,8 +205,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <img src={user?.photoURL || "https://picsum.photos/seed/admin/100/100"} alt="User" referrerPolicy="no-referrer" />
               </div>
               <div className="max-w-[120px]">
-                <p className="text-sm font-bold truncate">{user?.displayName || "Пользователь"}</p>
-                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">{userRole || "Загрузка..."}</p>
+                <p className="text-sm font-bold truncate">shakar46</p>
+                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Администратор</p>
               </div>
             </div>
             <button 

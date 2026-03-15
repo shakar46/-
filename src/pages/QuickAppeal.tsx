@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, getDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { 
@@ -63,11 +63,39 @@ export default function QuickAppeal() {
     setLoading(true);
     setStatus("idle");
     try {
-      await addDoc(collection(db, "appeals"), {
+      const docRef = await addDoc(collection(db, "appeals"), {
         ...formData,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
+      
+      const appealId = docRef.id;
+
+      // Telegram notification logic
+      const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
+      if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
+        const { telegram_token, telegram_chat_id } = settingsSnap.data();
+        if (telegram_token && telegram_chat_id) {
+          const message = `🚀 *Новое быстрое обращение*\n\n` +
+                         `ID: #${appealId.slice(0, 8)}\n` +
+                         `👤 Клиент: ${formData.client_name}\n` +
+                         `📞 Телефон: ${formData.client_phone}\n` +
+                         `📍 Филиал: ${formData.branch_name}\n` +
+                         `📝 Текст: ${formData.complaint_text}\n\n` +
+                         `🔗 [Открыть в CRM](${window.location.origin}/appeals/${appealId})`;
+          
+          fetch(`https://api.telegram.org/bot${telegram_token}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              chat_id: telegram_chat_id, 
+              text: message,
+              parse_mode: "Markdown"
+            })
+          }).catch(console.error);
+        }
+      }
+
       setStatus("success");
       setFormData({
         client_name: "",
