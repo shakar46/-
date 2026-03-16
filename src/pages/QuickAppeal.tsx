@@ -82,7 +82,7 @@ export default function QuickAppeal() {
                          `📞 Телефон: ${formData.client_phone}\n` +
                          `📍 Филиал: ${formData.branch_name}\n` +
                          `📝 Текст: ${formData.complaint_text}\n\n` +
-                         `🔗 [Открыть в CRM](${window.location.origin}/appeals/${appealId})`;
+                         `🔗 [Открыть в CRM](${window.location.origin}/#/appeals/${appealId})`;
           
           fetch(`https://api.telegram.org/bot${telegram_token}/sendMessage`, {
             method: "POST",

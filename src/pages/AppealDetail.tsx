@@ -305,7 +305,7 @@ export default function AppealDetail() {
       if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
         const { telegram_token, telegram_chat_id } = settingsSnap.data();
         if (telegram_token && telegram_chat_id) {
-          let message = `📢 ${isNew ? "Новое обращение" : "Обновление обращения"} #${appealId?.slice(0, 8)}\n👤 Клиент: ${appeal.client_name}\n📍 Филиал: ${appeal.branch_name}\n📝 Статус: ${appeal.status}\n🔗 Подробнее: ${window.location.origin}/appeals/${appealId}`;
+          let message = `📢 ${isNew ? "Новое обращение" : "Обновление обращения"} #${appealId?.slice(0, 8)}\n👤 Клиент: ${appeal.client_name}\n📍 Филиал: ${appeal.branch_name}\n📝 Статус: ${appeal.status}\n🔗 Подробнее: ${window.location.origin}/#/appeals/${appealId}`;
           
           // Overdue notification
           if (appeal.deadline === "Просроченно выполнен" || appeal.deadline === "Вообще не выполнен") {
