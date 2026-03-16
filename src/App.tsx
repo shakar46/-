@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from "react-router-dom";
+import { HashRouter as Router, Routes, Route, Link, useLocation } from "react-router-dom";
 import { 
   LayoutDashboard, 
   MessageSquare, 
@@ -80,9 +80,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, userRole, loading: firebaseLoading } = useFirebase();
-  const [isAuthenticated, setIsAuthenticated] = useState(localStorage.getItem("crm_auth") === "true");
-  const [loginData, setLoginData] = useState({ username: "", password: "" });
-  const [loginError, setLoginError] = useState(false);
 
   const menuItems = [
     { to: "/", icon: LayoutDashboard, label: "Главная" },
@@ -95,39 +92,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/settings", icon: Settings, label: "Настройки" },
   ];
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginData.username === "shakar46" && loginData.password === "uzsh1973") {
-      try {
-        await signInAnonymously(auth);
-        setIsAuthenticated(true);
-        localStorage.setItem("crm_auth", "true");
-        setLoginError(false);
-      } catch (error) {
-        console.error("Error signing in anonymously:", error);
-        setLoginError(true);
-      }
-    } else {
-      setLoginError(true);
+  const handleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Error signing in with Google:", error);
     }
   };
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (localStorage.getItem("crm_auth") === "true" && !auth.currentUser) {
-        try {
-          await signInAnonymously(auth);
-        } catch (error) {
-          console.error("Error auto-signing in anonymously:", error);
-        }
-      }
-    };
-    checkAuth();
-  }, []);
-
   const handleLogout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem("crm_auth");
     signOut(auth);
   };
 
@@ -139,7 +113,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (!isAuthenticated && location.pathname !== "/form") {
+  if (!user && location.pathname !== "/form") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6">
         <motion.div 
@@ -151,42 +125,15 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <span className="text-white font-bold text-3xl">Ш</span>
           </div>
           <h2 className="text-3xl font-bold mb-4 tracking-tight">Вход в систему</h2>
-          <p className="text-zinc-500 mb-8">Введите данные для доступа к CRM Шакарочка.</p>
+          <p className="text-zinc-500 mb-8">Используйте Google для входа в CRM Шакарочка.</p>
           
-          <form onSubmit={handleLogin} className="space-y-4 text-left">
-            <div>
-              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 ml-1">Логин</label>
-              <input 
-                type="text"
-                value={loginData.username}
-                onChange={(e) => setLoginData({...loginData, username: e.target.value})}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-black/5 focus:border-black outline-none transition-all"
-                placeholder="Введите логин"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 ml-1">Пароль</label>
-              <input 
-                type="password"
-                value={loginData.password}
-                onChange={(e) => setLoginData({...loginData, password: e.target.value})}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-black/5 focus:border-black outline-none transition-all"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            {loginError && (
-              <p className="text-rose-500 text-xs font-bold text-center">Неверный логин или пароль</p>
-            )}
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center gap-3 bg-black text-white py-4 rounded-2xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10 mt-4"
-            >
-              <LogIn size={20} />
-              Войти
-            </button>
-          </form>
+          <button
+            onClick={handleLogin}
+            className="w-full flex items-center justify-center gap-3 bg-black text-white py-4 rounded-2xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10 mt-4"
+          >
+            <LogIn size={20} />
+            Войти через Google
+          </button>
         </motion.div>
       </div>
     );
@@ -225,8 +172,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <img src={user?.photoURL || "https://picsum.photos/seed/admin/100/100"} alt="User" referrerPolicy="no-referrer" />
               </div>
               <div className="max-w-[120px]">
-                <p className="text-sm font-bold truncate">shakar46</p>
-                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Администратор</p>
+                <p className="text-sm font-bold truncate">{user?.displayName || "Пользователь"}</p>
+                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">{userRole === 'admin' ? 'Администратор' : 'Оператор'}</p>
               </div>
             </div>
             <button 
