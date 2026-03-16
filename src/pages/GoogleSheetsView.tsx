@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { 
   FileSpreadsheet, 
   RefreshCw, 
@@ -51,8 +53,6 @@ export default function GoogleSheetsView() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const { doc, getDoc } = await import("firebase/firestore");
-        const { db } = await import("../firebase");
         const docRef = doc(db, "settings", "telegram");
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {

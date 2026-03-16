@@ -49,32 +49,27 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'operator' || isAdmin());
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
-      allow delete: if isAdmin();
+      allow write: if isAdmin() || (isOwner(userId) && isValidUser(request.resource.data));
     }
 
     match /appeals/{appealId} {
-      // Public can create appeals (for the public form)
+      allow read, write: if isAuthenticated() || isAdmin();
       allow create: if isValidAppeal(request.resource.data);
-      // Only staff can read and update
-      allow read, update: if isAuthenticated();
-      allow delete: if isAdmin();
     }
 
     match /scripts/{scriptId} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager');
+      allow read: if isAuthenticated() || isAdmin();
+      allow write: if isAdmin();
     }
 
     match /settings/{settingId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isAuthenticated() || isAdmin();
     }
 
     match /audit_logs/{logId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update, delete: if false; // Audit logs are immutable
+      allow read: if isAuthenticated() || isAdmin();
+      allow create: if isAuthenticated() || isAdmin();
+      allow update, delete: if false;
     }
   }
 }
