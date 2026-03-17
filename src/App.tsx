@@ -38,7 +38,6 @@ import AppealDetail from "./pages/AppealDetail";
 import Analytics from "./pages/Analytics";
 import PublicForm from "./pages/PublicForm";
 import RepeatingAppeals from "./pages/RepeatingAppeals";
-import GoogleSheetsView from "./pages/GoogleSheetsView";
 import TelegramSettings from "./pages/TelegramSettings";
 import QuickAppeal from "./pages/QuickAppeal";
 import Scripts from "./pages/Scripts";
@@ -88,7 +87,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/repeating", icon: Users, label: "Повторные жалобы" },
     { to: "/analytics", icon: BarChart3, label: "Аналитика" },
     { to: "/scripts", icon: FileText, label: "Скрипты" },
-    { to: "/google-sheets", icon: Table, label: "Google Таблица" },
     { to: "/settings", icon: Settings, label: "Настройки" },
   ];
 
@@ -252,7 +250,6 @@ export default function App() {
               <Route path="/appeals/:id" element={<AppealDetail />} />
               <Route path="/repeating" element={<RepeatingAppeals />} />
               <Route path="/analytics" element={<Analytics />} />
-              <Route path="/google-sheets" element={<GoogleSheetsView />} />
               <Route path="/settings" element={<TelegramSettings />} />
               <Route path="/quick-appeal" element={<QuickAppeal />} />
               <Route path="/scripts" element={<Scripts />} />

@@ -40,6 +40,8 @@ export default function Appeals() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -53,7 +55,7 @@ export default function Appeals() {
   const fetchAppeals = async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, "appeals"), orderBy(sortField, sortOrder), limit(100));
+      const q = query(collection(db, "appeals"), orderBy("created_at", "desc"), limit(500));
       const querySnapshot = await getDocs(q);
       const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appeal));
       setAppeals(data);
@@ -84,19 +86,83 @@ export default function Appeals() {
 
   useEffect(() => {
     fetchAppeals();
-  }, [sortField, sortOrder]);
+  }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, branchFilter]);
+
+  const isNearingDeadline = (appeal: Appeal) => {
+    if (!appeal.completion_date || appeal.deadline) return false;
+    try {
+      const deadlineDate = new Date(appeal.completion_date);
+      const now = new Date();
+      const diffTime = deadlineDate.getTime() - now.getTime();
+      const diffHours = diffTime / (1000 * 60 * 60);
+      return diffHours > 0 && diffHours <= 24;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const isOverdue = (appeal: Appeal) => {
+    if (!appeal.completion_date || appeal.deadline) return false;
+    try {
+      const deadlineDate = new Date(appeal.completion_date);
+      const now = new Date();
+      return deadlineDate.getTime() < now.getTime();
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const formatDate = (dateValue: any) => {
+    if (!dateValue) return "—";
+    try {
+      const date = dateValue.toDate ? dateValue.toDate() : new Date(dateValue);
+      if (isNaN(date.getTime())) return "—";
+      return format(date, "dd MMM, HH:mm", { locale: ru });
+    } catch (e) {
+      return "—";
+    }
+  };
 
   const filteredAppeals = appeals.filter(a => {
     const matchesSearch = 
       a.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.client_phone?.includes(searchQuery) ||
-      a.id.toLowerCase().includes(searchQuery.toLowerCase());
+      (a.id && a.id.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesStatus = statusFilter === "Все" || a.status === statusFilter;
     const matchesBranch = branchFilter === "Все" || a.branch_name === branchFilter;
 
     return matchesSearch && matchesStatus && matchesBranch;
+  }).sort((a, b) => {
+    const valA = (a as any)[sortField];
+    const valB = (b as any)[sortField];
+    
+    if (sortField === "created_at") {
+      const dateA = valA?.toDate ? valA.toDate() : new Date(valA || 0);
+      const dateB = valB?.toDate ? valB.toDate() : new Date(valB || 0);
+      const timeA = isNaN(dateA.getTime()) ? 0 : dateA.getTime();
+      const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime();
+      return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
+    }
+    
+    if (typeof valA === "string") {
+      return sortOrder === "asc" 
+        ? valA.localeCompare(valB || "") 
+        : (valB || "").localeCompare(valA);
+    }
+    
+    return sortOrder === "asc" ? (valA || 0) - (valB || 0) : (valB || 0) - (valA || 0);
   });
+
+  const totalPages = Math.ceil(filteredAppeals.length / itemsPerPage);
+  const paginatedAppeals = filteredAppeals.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -258,7 +324,15 @@ export default function Appeals() {
                     <ArrowUpDown size={12} className={sortField === "client_name" ? "text-black" : "text-zinc-300"} />
                   </div>
                 </th>
-                <th className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Классификация</th>
+                <th 
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors"
+                  onClick={() => handleSort("complaint_classification")}
+                >
+                  <div className="flex items-center gap-2">
+                    Классификация
+                    <ArrowUpDown size={12} className={sortField === "complaint_classification" ? "text-black" : "text-zinc-300"} />
+                  </div>
+                </th>
                 <th 
                   className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors"
                   onClick={() => handleSort("status")}
@@ -268,7 +342,15 @@ export default function Appeals() {
                     <ArrowUpDown size={12} className={sortField === "status" ? "text-black" : "text-zinc-300"} />
                   </div>
                 </th>
-                <th className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Филиал</th>
+                <th 
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors"
+                  onClick={() => handleSort("branch_name")}
+                >
+                  <div className="flex items-center gap-2">
+                    Филиал
+                    <ArrowUpDown size={12} className={sortField === "branch_name" ? "text-black" : "text-zinc-300"} />
+                  </div>
+                </th>
                 <th className="px-6 py-4"></th>
               </tr>
             </thead>
@@ -286,21 +368,37 @@ export default function Appeals() {
                   </td>
                 </tr>
               ) : (
-                filteredAppeals.map((appeal) => (
+                paginatedAppeals.map((appeal) => (
                   <React.Fragment key={appeal.id}>
                     <tr 
                       className={cn(
-                        "hover:bg-zinc-50/50 transition-colors group cursor-pointer",
-                        expandedRowId === appeal.id && "bg-zinc-50/80"
+                        "hover:bg-zinc-50/50 transition-colors group cursor-pointer relative",
+                        expandedRowId === appeal.id && "bg-zinc-50/80",
+                        isNearingDeadline(appeal) && "bg-amber-50/30",
+                        isOverdue(appeal) && "bg-red-50/30"
                       )}
                       onClick={() => setExpandedRowId(expandedRowId === appeal.id ? null : appeal.id)}
                     >
                       <td className="px-6 py-5">
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-zinc-400 mb-1">#{appeal.id.slice(0, 8)}</span>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-zinc-400">#{appeal.id?.slice(0, 8) || "—"}</span>
+                            {isNearingDeadline(appeal) && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-bold animate-pulse">
+                                <Clock className="w-2.5 h-2.5" />
+                                <span>24ч</span>
+                              </div>
+                            )}
+                            {isOverdue(appeal) && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[9px] font-bold">
+                                <AlertCircle className="w-2.5 h-2.5" />
+                                <span>Просрочено</span>
+                              </div>
+                            )}
+                          </div>
                           <span className="text-sm font-medium flex items-center gap-1.5">
                             <Clock size={14} className="text-zinc-300" />
-                            {format(new Date(appeal.created_at), "dd MMM, HH:mm", { locale: ru })}
+                            {formatDate(appeal.created_at)}
                           </span>
                         </div>
                       </td>
@@ -375,6 +473,12 @@ export default function Appeals() {
                                       {appeal.complaint_text || "Текст отсутствует"}
                                     </p>
                                   </div>
+                                  <div>
+                                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Прилагательный комментарий</h4>
+                                    <p className="text-sm text-zinc-700 leading-relaxed bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm">
+                                      {appeal.adjective_comment || "Комментарий отсутствует"}
+                                    </p>
+                                  </div>
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
                                       <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Источник</h4>
@@ -426,11 +530,58 @@ export default function Appeals() {
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex items-center justify-between">
-          <p className="text-xs text-zinc-400 font-medium">Показано {filteredAppeals.length} из {appeals.length} обращений</p>
-          <div className="flex gap-2">
-            <button disabled className="p-2 text-zinc-300 cursor-not-allowed"><ChevronRight size={18} className="rotate-180" /></button>
-            <button disabled className="p-2 text-zinc-300 cursor-not-allowed"><ChevronRight size={18} /></button>
+        <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-xs text-zinc-400 font-medium order-2 sm:order-1">
+            Показано {filteredAppeals.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(filteredAppeals.length, currentPage * itemsPerPage)} из {filteredAppeals.length} результатов
+          </p>
+          <div className="flex items-center gap-2 order-1 sm:order-2">
+            <button 
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className={`p-2 rounded-xl transition-all ${currentPage === 1 ? 'text-zinc-300 cursor-not-allowed' : 'text-zinc-600 hover:bg-zinc-100 hover:text-black'}`}
+            >
+              <ChevronRight size={18} className="rotate-180" />
+            </button>
+            
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                // Show only a few page numbers if there are many
+                if (
+                  totalPages <= 7 ||
+                  pageNum === 1 ||
+                  pageNum === totalPages ||
+                  (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                ) {
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                        currentPage === pageNum 
+                          ? 'bg-black text-white' 
+                          : 'text-zinc-500 hover:bg-zinc-100 hover:text-black'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                } else if (
+                  (pageNum === 2 && currentPage > 3) ||
+                  (pageNum === totalPages - 1 && currentPage < totalPages - 2)
+                ) {
+                  return <span key={pageNum} className="text-zinc-300 px-1">...</span>;
+                }
+                return null;
+              })}
+            </div>
+
+            <button 
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className={`p-2 rounded-xl transition-all ${currentPage === totalPages || totalPages === 0 ? 'text-zinc-300 cursor-not-allowed' : 'text-zinc-600 hover:bg-zinc-100 hover:text-black'}`}
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
         </div>
       </div>

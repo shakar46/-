@@ -49,4 +49,6 @@ export interface Appeal {
   sip_link?: string;
   complaint_photos?: string[];
   completion_date?: string;
+  confirmed_classification?: string;
+  confirmed_section?: string;
 }

@@ -10,7 +10,9 @@ export default function Scripts() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [editingScript, setEditingScript] = useState<any>(null);
+  const [scriptToDelete, setScriptToDelete] = useState<string | null>(null);
   const [formData, setFormData] = useState({ title: "", content: "", category: "Общее" });
 
   useEffect(() => {
@@ -47,14 +49,15 @@ export default function Scripts() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Вы уверены, что хотите удалить этот скрипт?")) {
-      try {
-        await deleteDoc(doc(db, "scripts", id));
-        fetchScripts();
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `scripts/${id}`);
-      }
+  const handleDelete = async () => {
+    if (!scriptToDelete) return;
+    try {
+      await deleteDoc(doc(db, "scripts", scriptToDelete));
+      setIsDeleteModalOpen(false);
+      setScriptToDelete(null);
+      fetchScripts();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `scripts/${scriptToDelete}`);
     }
   };
 
@@ -126,7 +129,10 @@ export default function Scripts() {
                     <Edit size={16} />
                   </button>
                   <button 
-                    onClick={() => handleDelete(script.id)}
+                    onClick={() => {
+                      setScriptToDelete(script.id);
+                      setIsDeleteModalOpen(true);
+                    }}
                     className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
                   >
                     <Trash2 size={16} />
@@ -157,7 +163,7 @@ export default function Scripts() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -225,6 +231,42 @@ export default function Scripts() {
           </motion.div>
         </div>
       )}
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center"
+            >
+              <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-2xl font-bold mb-2 tracking-tight">Удалить скрипт?</h3>
+              <p className="text-zinc-500 mb-8">Это действие необратимо. Скрипт будет удален из базы данных навсегда.</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setScriptToDelete(null);
+                  }}
+                  className="flex-1 px-6 py-3 rounded-xl font-bold border border-zinc-200 hover:bg-zinc-50 transition-all"
+                >
+                  Отмена
+                </button>
+                <button 
+                  onClick={handleDelete}
+                  className="flex-1 px-6 py-3 rounded-xl font-bold bg-rose-500 text-white hover:bg-rose-600 transition-all shadow-lg shadow-rose-500/20"
+                >
+                  Удалить
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

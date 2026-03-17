@@ -63,7 +63,7 @@ const Autocomplete = ({ label, value, options, onChange, placeholder }: any) => 
 
   return (
     <div className="relative" ref={containerRef}>
-      <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">{label}</label>
+      {label && <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">{label}</label>}
       <div 
         onClick={() => setIsOpen(true)}
         className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm flex items-center justify-between cursor-pointer hover:border-zinc-300 transition-all"
@@ -118,7 +118,7 @@ const Autocomplete = ({ label, value, options, onChange, placeholder }: any) => 
   );
 };
 
-const MultiSelect = ({ label, values = [], options, onChange }: any) => {
+const MultiSelect = ({ label, values = [], options, onChange, placeholder }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -146,7 +146,7 @@ const MultiSelect = ({ label, values = [], options, onChange }: any) => {
 
   return (
     <div className="relative" ref={containerRef}>
-      <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">{label}</label>
+      {label && <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">{label}</label>}
       <div 
         onClick={() => setIsOpen(true)}
         className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 min-h-[46px] text-sm flex flex-wrap gap-2 cursor-pointer hover:border-zinc-300 transition-all"
@@ -159,7 +159,7 @@ const MultiSelect = ({ label, values = [], options, onChange }: any) => {
             </span>
           ))
         ) : (
-          <span className="text-zinc-400 py-1">Выберите варианты...</span>
+          <span className="text-zinc-400 py-1">{placeholder || "Выберите варианты..."}</span>
         )}
       </div>
 
@@ -216,7 +216,10 @@ export default function AppealDetail() {
     source: SOURCES[0],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    complaint_photos: []
+    complaint_photos: [],
+    completion_date: "",
+    confirmed_classification: "",
+    confirmed_section: ""
   });
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [scripts, setScripts] = useState<any[]>([]);
@@ -571,6 +574,34 @@ export default function AppealDetail() {
                 options={MOTIVATION_STATUSES}
                 onChange={(val: string) => setAppeal({...appeal, motivation_status: val})}
               />
+            </div>
+            <div className="bg-zinc-50/50 rounded-3xl p-6 border border-zinc-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center">
+                  <Tag size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900">Подтвержденная классификация</h3>
+                  <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Итоговый анализ типа и разделов жалобы</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Autocomplete 
+                  label="Категория (Тип)"
+                  value={appeal.confirmed_classification || ""}
+                  options={COMPLAINT_CLASSIFICATIONS}
+                  onChange={(val: string) => setAppeal({...appeal, confirmed_classification: val})}
+                  placeholder="Выберите тип..."
+                />
+                <MultiSelect 
+                  label="Секции (Разделы)"
+                  values={parseMulti(appeal.confirmed_section)}
+                  options={CLASSIFICATION_SECTIONS}
+                  onChange={(vals: string[]) => setAppeal({...appeal, confirmed_section: stringifyMulti(vals)})}
+                  placeholder="Выберите разделы..."
+                />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Анализ корневых причин</label>

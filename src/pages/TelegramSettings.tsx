@@ -9,12 +9,19 @@ export default function TelegramSettings() {
   const [settings, setSettings] = useState({
     telegram_token: "",
     telegram_chat_id: "",
-    google_spreadsheet_url: "",
     notifications_enabled: true
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [testStatus, setTestStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+
+  useEffect(() => {
+    if (saveStatus !== "idle") {
+      const timer = setTimeout(() => setSaveStatus("idle"), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [saveStatus]);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -34,10 +41,12 @@ export default function TelegramSettings() {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveStatus("idle");
     try {
       await setDoc(doc(db, "settings", "telegram"), settings);
-      alert("Настройки успешно сохранены!");
+      setSaveStatus("success");
     } catch (error) {
+      setSaveStatus("error");
       handleFirestoreError(error, OperationType.WRITE, "settings/telegram");
     }
     setSaving(false);
@@ -128,28 +137,30 @@ export default function TelegramSettings() {
                 />
                 <p className="mt-2 text-[10px] text-zinc-400 italic">ID группы или канала, куда будут приходить уведомления</p>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Ссылка на Google Таблицу</label>
-                <input
-                  type="text"
-                  value={settings.google_spreadsheet_url || ""}
-                  onChange={(e) => setSettings({ ...settings, google_spreadsheet_url: e.target.value })}
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
-                />
-                <p className="mt-2 text-[10px] text-zinc-400 italic">Ссылка для быстрого перехода к таблице с данными</p>
-              </div>
             </div>
 
             <div className="pt-4 flex gap-3">
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 bg-black text-white py-3 rounded-xl font-bold hover:scale-[1.02] transition-all disabled:opacity-50"
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all disabled:opacity-50 ${
+                  saveStatus === "success" ? "bg-emerald-500 text-white" : 
+                  saveStatus === "error" ? "bg-rose-500 text-white" : "bg-black text-white hover:scale-[1.02]"
+                }`}
               >
-                <Save size={18} />
-                {saving ? "Сохранение..." : "Сохранить настройки"}
+                {saveStatus === "success" ? (
+                  <>
+                    <ShieldCheck size={18} />
+                    Сохранено!
+                  </>
+                ) : saveStatus === "error" ? (
+                  "Ошибка!"
+                ) : (
+                  <>
+                    <Save size={18} />
+                    {saving ? "Сохранение..." : "Сохранить настройки"}
+                  </>
+                )}
               </button>
               <button
                 onClick={testNotification}

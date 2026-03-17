@@ -27,21 +27,72 @@ export interface Complaint {
 }
 
 const privateKey = process.env.GOOGLE_PRIVATE_KEY;
-const formattedKey = privateKey 
-  ? privateKey.replace(/\\n/g, "\n").replace(/^"(.*)"$/, "$1").trim() 
-  : undefined;
+let formattedKey: string | undefined;
+
+if (privateKey) {
+  try {
+    // 1. Try to parse as JSON first (in case the whole service account JSON was pasted)
+    if (privateKey.trim().startsWith('{')) {
+      const json = JSON.parse(privateKey);
+      if (json.private_key) {
+        formattedKey = json.private_key;
+      }
+    }
+  } catch (e) {
+    // Not JSON
+  }
+
+  // 2. If not JSON or JSON didn't have private_key, process as PEM string
+  if (!formattedKey) {
+    formattedKey = privateKey
+      .replace(/\\n/g, "\n")
+      .replace(/^['"]|['"]$/g, "")
+      .trim();
+  }
+
+  // 3. If it still doesn't look like a PEM, check if it's base64 encoded
+  if (formattedKey && !formattedKey.startsWith("-")) {
+    try {
+      const decoded = Buffer.from(formattedKey, 'base64').toString('utf-8');
+      if (decoded.includes("-----BEGIN")) {
+        formattedKey = decoded;
+      }
+    } catch (e) {
+      // Not base64 or decode failed
+    }
+  }
+}
+
+if (!formattedKey) {
+  console.warn("GOOGLE_PRIVATE_KEY is not defined or could not be parsed");
+}
+
+if (formattedKey && !formattedKey.includes("-----BEGIN PRIVATE KEY-----")) {
+  console.warn("GOOGLE_PRIVATE_KEY does not contain '-----BEGIN PRIVATE KEY-----'. Current start: " + formattedKey.substring(0, 20));
+}
+
+const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+const formattedEmail = clientEmail ? clientEmail.replace(/^['"]|['"]$/g, "").trim() : undefined;
+
+if (!formattedEmail) {
+  console.warn("[GoogleSheets] GOOGLE_CLIENT_EMAIL is not defined");
+} else if (!formattedEmail.includes("@")) {
+  console.warn("[GoogleSheets] GOOGLE_CLIENT_EMAIL does not look like a valid email: " + formattedEmail);
+}
+
+const SPREADSHEET_ID = (process.env.GOOGLE_SPREADSHEET_ID || "1SreBqz3uOdlewZMKvOcFlXnCNtmcfcUK").replace(/^['"]|['"]$/g, "").trim();
+
+console.log(`[GoogleSheets] Initializing with email: ${formattedEmail}, Key length: ${formattedKey?.length || 0}, Spreadsheet: ${SPREADSHEET_ID.substring(0, 5)}...`);
 
 const auth = new google.auth.GoogleAuth({
   credentials: {
-    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    client_email: formattedEmail,
     private_key: formattedKey,
   },
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
 
 const sheets = google.sheets({ version: "v4", auth });
-
-const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || "1SreBqz3uOdlewZMKvOcFlXnCNtmcfcUK";
 const RANGE = "Sheet1!A2:W";
 
 export async function getComplaints(): Promise<Complaint[]> {
