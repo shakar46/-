@@ -23,7 +23,8 @@ import {
   LogOut,
   LogIn,
   ShieldCheck,
-  History
+  History,
+  AlertCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
@@ -84,7 +85,7 @@ const SidebarItem = ({ to, icon: Icon, label, active }: SidebarItemProps) => (
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, userRole, isAuthorized, loading: firebaseLoading } = useFirebase();
+  const { user, userRole, userData, isAuthorized, loading: firebaseLoading, error: firebaseError } = useFirebase();
 
   const menuItems = [
     { to: "/", icon: LayoutDashboard, label: "Главная" },
@@ -128,12 +129,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   const handleLogout = async () => {
     if (user) {
-      const { user: firebaseUser, userData } = { user, userData: (useFirebase() as any).userData };
-      
       await logEvent({
-        userId: firebaseUser.uid,
-        userEmail: firebaseUser.email || "",
-        userName: firebaseUser.displayName || userData?.displayName || "User",
+        userId: user.uid,
+        userEmail: user.email || "",
+        userName: user.displayName || userData?.displayName || "User",
         type: 'logout',
         action: 'Выход из системы'
       });
@@ -183,13 +182,27 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-md w-full bg-white rounded-[2.5rem] border border-zinc-200 p-10 shadow-2xl text-center"
         >
-          <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-8">
-            <ShieldCheck size={32} />
-          </div>
-          <h2 className="text-2xl font-bold mb-4 tracking-tight">Доступ ограничен</h2>
-          <p className="text-zinc-500 mb-8 leading-relaxed">
-            Просим прощения, вы не являетесь сотрудником данного отдела. Доступ к платформе ограничен.
-          </p>
+          {firebaseError ? (
+            <>
+              <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-8">
+                <AlertCircle size={32} />
+              </div>
+              <h2 className="text-2xl font-bold mb-4 tracking-tight">Ошибка доступа</h2>
+              <p className="text-zinc-500 mb-8 leading-relaxed">
+                {firebaseError}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-8">
+                <ShieldCheck size={32} />
+              </div>
+              <h2 className="text-2xl font-bold mb-4 tracking-tight">Доступ ограничен</h2>
+              <p className="text-zinc-500 mb-8 leading-relaxed">
+                Просим прощения, вы не являетесь сотрудником данного отдела. Доступ к платформе ограничен.
+              </p>
+            </>
+          )}
           
           <button
             onClick={handleLogout}

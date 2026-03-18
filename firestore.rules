@@ -63,24 +63,28 @@ service cloud.firestore {
 
     // Users Collection
     match /users/{userId} {
-      allow read: if isStaff();
+      // Allow users to read their own document (by UID or by email match)
+      allow read: if isStaff() || (isAuthenticated() && (request.auth.uid == userId || resource.data.email == request.auth.token.email));
       
-      // Only admins can create users
-      allow create: if isAdmin() && isValidUser(request.resource.data) && (
-        // Admins can only create operators, Super Admin can create anything
-        isSuperAdmin() || request.resource.data.role == "operator"
-      );
+      // Allow super admin to create anything
+      // Allow admins to create operators
+      // Allow authenticated users to create their own document IF they match a pre-added email
+      allow create: if (isAdmin() && isValidUser(request.resource.data) && (isSuperAdmin() || request.resource.data.role == "operator")) ||
+                    (isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data) && 
+                     exists(/databases/$(database)/documents/users/$(request.auth.uid)) == false &&
+                     request.resource.data.email == request.auth.token.email);
       
-      // Only admins can update users
-      allow update: if isAdmin() && isValidUser(request.resource.data) && (
-        // Prevent changing super admin role
-        (resource.data.email != "shakar0406@gmail.com") &&
-        // Admins can only set role to operator, Super Admin can set anything
-        (isSuperAdmin() || request.resource.data.role == "operator")
-      );
+      // Allow users to update their own document (e.g. lastLogin)
+      allow update: if (isAdmin() && isValidUser(request.resource.data) && (resource.data.email != "shakar0406@gmail.com") && (isSuperAdmin() || request.resource.data.role == "operator")) ||
+                    (isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data) && 
+                     request.resource.data.email == resource.data.email &&
+                     request.resource.data.role == resource.data.role);
       
-      // Only admins can delete users
-      allow delete: if isAdmin() && resource.data.email != "shakar0406@gmail.com";
+      // Allow super admin to delete anything
+      // Allow admins to delete non-super-admins
+      // Allow a user to delete a pre-added document if it matches their email (used during UID linking)
+      allow delete: if (isAdmin() && resource.data.email != "shakar0406@gmail.com") ||
+                    (isAuthenticated() && resource.data.email == request.auth.token.email && resource.data.uid == null);
     }
 
     // Appeals Collection

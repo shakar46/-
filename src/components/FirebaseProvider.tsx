@@ -9,6 +9,7 @@ interface FirebaseContextType {
   userData: any | null;
   isAuthorized: boolean;
   loading: boolean;
+  error: string | null;
 }
 
 const FirebaseContext = createContext<FirebaseContextType>({
@@ -17,6 +18,7 @@ const FirebaseContext = createContext<FirebaseContextType>({
   userData: null,
   isAuthorized: false,
   loading: true,
+  error: null,
 });
 
 export const useFirebase = () => useContext(FirebaseContext);
@@ -27,6 +29,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [userData, setUserData] = useState<any | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
@@ -36,6 +39,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setUserRole(null);
         setIsAuthorized(false);
         setLoading(false);
+        setError(null);
       }
     });
 
@@ -46,74 +50,82 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!user) return;
 
     setLoading(true);
+    setError(null);
     
     // Listen for user data changes by email
     const q = query(collection(db, 'users'), where('email', '==', user.email));
     const unsubscribeSnapshot = onSnapshot(q, async (snapshot) => {
-      if (!snapshot.empty) {
-        const userDoc = snapshot.docs[0];
-        const uData = userDoc.data();
-        
-        // If this is a pre-added user (no UID yet) or if the UID document doesn't exist
-        if (!uData.uid || userDoc.id !== user.uid) {
-          const finalData = {
-            ...uData,
+      try {
+        if (!snapshot.empty) {
+          const userDoc = snapshot.docs[0];
+          const uData = userDoc.data();
+          
+          // If this is a pre-added user (no UID yet) or if the UID document doesn't exist
+          if (!uData.uid || userDoc.id !== user.uid) {
+            const finalData = {
+              ...uData,
+              uid: user.uid,
+              displayName: user.displayName || uData.displayName || "User",
+              lastLogin: new Date().toISOString()
+            };
+
+            // Link UID to the user document (using UID as the document ID is better for security rules)
+            await setDoc(doc(db, 'users', user.uid), finalData);
+            
+            // Delete the old document if it was a pre-added one with a random ID
+            if (userDoc.id !== user.uid) {
+              await deleteDoc(doc(db, 'users', userDoc.id));
+            }
+            
+            setUserData(finalData);
+            setUserRole(uData.role);
+            setIsAuthorized(true);
+          } else {
+            // Update lastLogin if it's been more than 5 minutes since the last update
+            const now = new Date();
+            const lastUpdate = uData.lastLogin ? new Date(uData.lastLogin) : new Date(0);
+            const diffMinutes = (now.getTime() - lastUpdate.getTime()) / (1000 * 60);
+
+            if (diffMinutes > 5) {
+              await setDoc(doc(db, 'users', user.uid), {
+                ...uData,
+                lastLogin: now.toISOString()
+              });
+            }
+
+            setUserData(uData);
+            setUserRole(uData.role);
+            setIsAuthorized(true);
+          }
+        } else if (user.email === "shakar0406@gmail.com") {
+          // Auto-provision the super admin if not found
+          const role = "admin";
+          const adminData = {
             uid: user.uid,
-            displayName: user.displayName || uData.displayName || "User",
+            email: user.email,
+            displayName: user.displayName || "Super Admin",
+            role: role,
+            createdAt: new Date().toISOString(),
             lastLogin: new Date().toISOString()
           };
-
-          // Link UID to the user document (using UID as the document ID is better for security rules)
-          await setDoc(doc(db, 'users', user.uid), finalData);
-          
-          // Delete the old document if it was a pre-added one with a random ID
-          if (userDoc.id !== user.uid) {
-            await deleteDoc(doc(db, 'users', userDoc.id));
-          }
-          
-          setUserData(finalData);
-          setUserRole(uData.role);
+          await setDoc(doc(db, 'users', user.uid), adminData);
+          setUserData(adminData);
+          setUserRole(role);
           setIsAuthorized(true);
         } else {
-          // Update lastLogin if it's been more than 5 minutes since the last update
-          const now = new Date();
-          const lastUpdate = uData.lastLogin ? new Date(uData.lastLogin) : new Date(0);
-          const diffMinutes = (now.getTime() - lastUpdate.getTime()) / (1000 * 60);
-
-          if (diffMinutes > 5) {
-            await setDoc(doc(db, 'users', user.uid), {
-              ...uData,
-              lastLogin: now.toISOString()
-            });
-          }
-
-          setUserData(uData);
-          setUserRole(uData.role);
-          setIsAuthorized(true);
+          setUserData(null);
+          setUserRole(null);
+          setIsAuthorized(false);
         }
-      } else if (user.email === "shakar0406@gmail.com") {
-        // Auto-provision the super admin if not found
-        const role = "admin";
-        const adminData = {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || "Super Admin",
-          role: role,
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'users', user.uid), adminData);
-        setUserData(adminData);
-        setUserRole(role);
-        setIsAuthorized(true);
-      } else {
-        setUserData(null);
-        setUserRole(null);
-        setIsAuthorized(false);
+      } catch (err: any) {
+        console.error("Error during user data sync:", err);
+        setError(err.message || "Ошибка при синхронизации данных пользователя");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }, (error) => {
       console.error("Firestore listener error:", error);
+      setError(error.message || "Ошибка при получении данных пользователя");
       setLoading(false);
     });
 
@@ -121,7 +133,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [user]);
 
   return (
-    <FirebaseContext.Provider value={{ user, userRole, userData, isAuthorized, loading }}>
+    <FirebaseContext.Provider value={{ user, userRole, userData, isAuthorized, loading, error }}>
       {children}
     </FirebaseContext.Provider>
   );
