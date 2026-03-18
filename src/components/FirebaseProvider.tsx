@@ -91,7 +91,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setUserRole(uData.role);
           setIsAuthorized(true);
         }
-      } else if (user.email === "shakar0406@gmail.com" || user.email === "4berserk4@gmail.com") {
+      } else if (user.email === "shakar0406@gmail.com") {
         // Auto-provision the super admin if not found
         const role = "admin";
         const adminData = {
