@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, onSnapshot, deleteDoc } from 'firebase/firestore';
 
 interface FirebaseContextType {
   user: User | null;
@@ -29,71 +29,83 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      
-      if (firebaseUser) {
-        // Fetch user role from Firestore
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      if (!firebaseUser) {
+        setUserData(null);
+        setUserRole(null);
+        setIsAuthorized(false);
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    setLoading(true);
+    
+    // Listen for user data changes by email
+    const q = query(collection(db, 'users'), where('email', '==', user.email));
+    const unsubscribeSnapshot = onSnapshot(q, async (snapshot) => {
+      if (!snapshot.empty) {
+        const userDoc = snapshot.docs[0];
+        const uData = userDoc.data();
         
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setUserData(data);
-          setUserRole(data.role);
+        // If this is a pre-added user (no UID yet) or if the UID document doesn't exist
+        if (!uData.uid || userDoc.id !== user.uid) {
+          const finalData = {
+            ...uData,
+            uid: user.uid,
+            displayName: user.displayName || uData.displayName || "User",
+            lastLogin: new Date().toISOString()
+          };
+
+          // Link UID to the user document (using UID as the document ID is better for security rules)
+          await setDoc(doc(db, 'users', user.uid), finalData);
+          
+          // Delete the old document if it was a pre-added one with a random ID
+          if (userDoc.id !== user.uid) {
+            await deleteDoc(doc(db, 'users', userDoc.id));
+          }
+          
+          setUserData(finalData);
+          setUserRole(uData.role);
           setIsAuthorized(true);
         } else {
-          // Check if user was pre-added by email
-          const q = query(collection(db, 'users'), where('email', '==', firebaseUser.email));
-          const querySnapshot = await getDocs(q);
-          
-          if (!querySnapshot.empty) {
-            const existingDoc = querySnapshot.docs[0];
-            const uData = existingDoc.data();
-            
-            const finalData = {
-              ...uData,
-              uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName || uData.displayName || "User",
-              lastLogin: new Date().toISOString()
-            };
-
-            // Link UID to the user document
-            await setDoc(doc(db, 'users', firebaseUser.uid), finalData);
-            
-            setUserData(finalData);
-            setUserRole(uData.role);
-            setIsAuthorized(true);
-          } else if (firebaseUser.email === "shakar0406@gmail.com") {
-            // Auto-provision the super admin
-            const role = "admin";
-            const adminData = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName || "Super Admin",
-              role: role,
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(doc(db, 'users', firebaseUser.uid), adminData);
-            setUserData(adminData);
-            setUserRole(role);
-            setIsAuthorized(true);
-          } else {
-            // User exists in Firebase Auth but not in our 'users' collection
-            setUserData(null);
-            setUserRole(null);
-            setIsAuthorized(false);
-          }
+          setUserData(uData);
+          setUserRole(uData.role);
+          setIsAuthorized(true);
         }
+      } else if (user.email === "shakar0406@gmail.com") {
+        // Auto-provision the super admin if not found
+        const role = "admin";
+        const adminData = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || "Super Admin",
+          role: role,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'users', user.uid), adminData);
+        setUserData(adminData);
+        setUserRole(role);
+        setIsAuthorized(true);
       } else {
         setUserData(null);
         setUserRole(null);
         setIsAuthorized(false);
       }
       setLoading(false);
+    }, (error) => {
+      console.error("Firestore listener error:", error);
+      setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => unsubscribeSnapshot();
+  }, [user]);
 
   return (
     <FirebaseContext.Provider value={{ user, userRole, userData, isAuthorized, loading }}>
