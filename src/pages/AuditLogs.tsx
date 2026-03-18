@@ -18,12 +18,16 @@ import {
   onSnapshot, 
   limit, 
   where,
-  Timestamp
+  Timestamp,
+  getDocs,
+  writeBatch,
+  doc
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { ru } from "date-fns/locale";
 import { motion, AnimatePresence } from "motion/react";
+import { Trash2 } from "lucide-react";
 
 interface AuditLog {
   id: string;
@@ -42,6 +46,42 @@ export default function AuditLogs() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("All");
   const [pageSize, setPageSize] = useState(50);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const deleteOldLogs = async () => {
+    if (!window.confirm("Вы уверены, что хотите удалить все логи старше 30 дней? Это действие необратимо.")) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const thirtyDaysAgo = subDays(new Date(), 30);
+      const q = query(
+        collection(db, "audit_history"),
+        where("timestamp", "<", Timestamp.fromDate(thirtyDaysAgo))
+      );
+
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) {
+        alert("Старых логов не найдено.");
+        setIsDeleting(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((document) => {
+        batch.delete(doc(db, "audit_history", document.id));
+      });
+
+      await batch.commit();
+      alert(`Успешно удалено ${snapshot.size} записей.`);
+    } catch (error) {
+      console.error("Error deleting old logs:", error);
+      alert("Ошибка при удалении старых логов.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     let q = query(
@@ -100,9 +140,19 @@ export default function AuditLogs() {
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">История действий</h1>
-        <p className="text-zinc-500">Журнал всех входов, выходов и ключевых действий в системе.</p>
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight mb-2">История действий</h1>
+          <p className="text-zinc-500">Журнал всех входов, выходов и ключевых действий в системе.</p>
+        </div>
+        <button
+          onClick={deleteOldLogs}
+          disabled={isDeleting}
+          className="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 px-6 py-3 rounded-xl font-bold hover:bg-rose-100 transition-all disabled:opacity-50"
+        >
+          <Trash2 size={18} />
+          {isDeleting ? "Удаление..." : "Очистить старые логи (>30 дней)"}
+        </button>
       </header>
 
       <div className="bg-white p-4 rounded-[2rem] border border-zinc-200 shadow-sm flex flex-col md:flex-row items-center gap-4">

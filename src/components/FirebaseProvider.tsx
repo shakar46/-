@@ -75,11 +75,23 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setUserRole(uData.role);
           setIsAuthorized(true);
         } else {
+          // Update lastLogin if it's been more than 5 minutes since the last update
+          const now = new Date();
+          const lastUpdate = uData.lastLogin ? new Date(uData.lastLogin) : new Date(0);
+          const diffMinutes = (now.getTime() - lastUpdate.getTime()) / (1000 * 60);
+
+          if (diffMinutes > 5) {
+            await setDoc(doc(db, 'users', user.uid), {
+              ...uData,
+              lastLogin: now.toISOString()
+            });
+          }
+
           setUserData(uData);
           setUserRole(uData.role);
           setIsAuthorized(true);
         }
-      } else if (user.email === "shakar0406@gmail.com") {
+      } else if (user.email === "shakar0406@gmail.com" || user.email === "4berserk4@gmail.com") {
         // Auto-provision the super admin if not found
         const role = "admin";
         const adminData = {
@@ -87,7 +99,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           email: user.email,
           displayName: user.displayName || "Super Admin",
           role: role,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString()
         };
         await setDoc(doc(db, 'users', user.uid), adminData);
         setUserData(adminData);

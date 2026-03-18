@@ -254,7 +254,7 @@ const UserManagement = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-zinc-50/50 border-bottom border-zinc-100">
+              <tr className="bg-zinc-50/50 border-b border-zinc-100">
                 <th className="px-8 py-5 text-xs font-bold text-zinc-400 uppercase tracking-widest">Сотрудник</th>
                 <th className="px-8 py-5 text-xs font-bold text-zinc-400 uppercase tracking-widest">Роль</th>
                 <th className="px-8 py-5 text-xs font-bold text-zinc-400 uppercase tracking-widest">Статус</th>
