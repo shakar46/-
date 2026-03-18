@@ -22,15 +22,18 @@ import {
   Users,
   LogOut,
   LogIn,
-  ShieldCheck
+  ShieldCheck,
+  History
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { FirebaseProvider, useFirebase } from "./components/FirebaseProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { auth } from "./firebase";
+import { auth, db } from "./firebase";
 import { signInWithPopup, GoogleAuthProvider, signOut, signInAnonymously } from "firebase/auth";
+import { logEvent } from "./utils/logger";
+import { doc, getDoc } from "firebase/firestore";
 
 // Pages
 import Dashboard from "./pages/Dashboard";
@@ -43,6 +46,7 @@ import TelegramSettings from "./pages/TelegramSettings";
 import QuickAppeal from "./pages/QuickAppeal";
 import Scripts from "./pages/Scripts";
 import UserManagement from "./pages/UserManagement";
+import AuditLogs from "./pages/AuditLogs";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -94,19 +98,46 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   // Admin-only items
   if (userRole === "admin") {
     menuItems.push({ to: "/users", icon: Users, label: "Пользователи" });
+    menuItems.push({ to: "/audit", icon: History, label: "История" });
     menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
   }
 
   const handleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      
+      // Log login
+      if (result.user) {
+        // We need to fetch the user data to get the role/name if it's already in firestore
+        const userDoc = await getDoc(doc(db, 'users', result.user.uid));
+        const userData = userDoc.exists() ? userDoc.data() : null;
+        
+        await logEvent({
+          userId: result.user.uid,
+          userEmail: result.user.email || "",
+          userName: result.user.displayName || userData?.displayName || "User",
+          type: 'login',
+          action: 'Вход в систему'
+        });
+      }
     } catch (error) {
       console.error("Error signing in with Google:", error);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (user) {
+      const { user: firebaseUser, userData } = { user, userData: (useFirebase() as any).userData };
+      
+      await logEvent({
+        userId: firebaseUser.uid,
+        userEmail: firebaseUser.email || "",
+        userName: firebaseUser.displayName || userData?.displayName || "User",
+        type: 'logout',
+        action: 'Выход из системы'
+      });
+    }
     signOut(auth);
   };
 
@@ -287,6 +318,7 @@ export default function App() {
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/settings" element={<TelegramSettings />} />
               <Route path="/users" element={<UserManagement />} />
+              <Route path="/audit" element={<AuditLogs />} />
               <Route path="/quick-appeal" element={<QuickAppeal />} />
               <Route path="/scripts" element={<Scripts />} />
               <Route path="/form" element={<PublicForm />} />

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../firebase";
+import { logEvent } from "../utils/logger";
 import { 
   collection, 
   query, 
@@ -94,11 +95,21 @@ const UserManagement = () => {
 
       // Add user to Firestore
       // We use a random ID because we don't have the UID yet
-      await addDoc(collection(db, "users"), {
+      const docRef = await addDoc(collection(db, "users"), {
         email: newEmail.trim().toLowerCase(),
         role: newRole,
         displayName: "Новый сотрудник",
         createdAt: serverTimestamp(),
+      });
+
+      // Log action
+      await logEvent({
+        userId: currentUser?.uid || "system",
+        userEmail: currentUser?.email || "",
+        userName: currentUser?.displayName || "User",
+        type: 'action',
+        action: `Добавлен новый пользователь: ${newEmail.trim().toLowerCase()} (${newRole})`,
+        metadata: { targetEmail: newEmail.trim().toLowerCase(), role: newRole, docId: docRef.id }
       });
 
       setIsAddModalOpen(false);
@@ -121,6 +132,16 @@ const UserManagement = () => {
 
     try {
       await deleteDoc(doc(db, "users", userId));
+      
+      // Log action
+      await logEvent({
+        userId: currentUser?.uid || "system",
+        userEmail: currentUser?.email || "",
+        userName: currentUser?.displayName || "User",
+        type: 'action',
+        action: `Удален пользователь: ${userEmail}`,
+        metadata: { targetUserId: userId, targetEmail: userEmail }
+      });
     } catch (err) {
       console.error("Error deleting user:", err);
       alert("Ошибка при удалении пользователя");
@@ -140,6 +161,16 @@ const UserManagement = () => {
       await updateDoc(doc(db, "users", userId), {
         role: newRole,
         updatedAt: serverTimestamp()
+      });
+
+      // Log action
+      await logEvent({
+        userId: currentUser?.uid || "system",
+        userEmail: currentUser?.email || "",
+        userName: currentUser?.displayName || "User",
+        type: 'action',
+        action: `Изменена роль пользователя ${userEmail} на ${newRole}`,
+        metadata: { targetUserId: userId, targetEmail: userEmail, newRole }
       });
     } catch (err) {
       console.error("Error updating role:", err);

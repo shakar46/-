@@ -91,10 +91,16 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Audit Logs
+    // Audit Logs (Appeal specific)
     match /audit_logs/{logId} {
       allow read: if isStaff();
       allow create: if isStaff();
+    }
+
+    // Global Audit History (Login/Logout/Actions)
+    match /audit_history/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
     }
 
     // Scripts

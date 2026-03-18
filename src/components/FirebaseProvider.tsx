@@ -6,6 +6,7 @@ import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase
 interface FirebaseContextType {
   user: User | null;
   userRole: string | null;
+  userData: any | null;
   isAuthorized: boolean;
   loading: boolean;
 }
@@ -13,6 +14,7 @@ interface FirebaseContextType {
 const FirebaseContext = createContext<FirebaseContextType>({
   user: null,
   userRole: null,
+  userData: null,
   isAuthorized: false,
   loading: true,
 });
@@ -22,6 +24,7 @@ export const useFirebase = () => useContext(FirebaseContext);
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userData, setUserData] = useState<any | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -34,7 +37,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         
         if (userDoc.exists()) {
-          setUserRole(userDoc.data().role);
+          const data = userDoc.data();
+          setUserData(data);
+          setUserRole(data.role);
           setIsAuthorized(true);
         } else {
           // Check if user was pre-added by email
@@ -43,37 +48,44 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           
           if (!querySnapshot.empty) {
             const existingDoc = querySnapshot.docs[0];
-            const userData = existingDoc.data();
+            const uData = existingDoc.data();
             
-            // Link UID to the user document
-            await setDoc(doc(db, 'users', firebaseUser.uid), {
-              ...userData,
+            const finalData = {
+              ...uData,
               uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName || userData.displayName || "User",
+              displayName: firebaseUser.displayName || uData.displayName || "User",
               lastLogin: new Date().toISOString()
-            });
+            };
+
+            // Link UID to the user document
+            await setDoc(doc(db, 'users', firebaseUser.uid), finalData);
             
-            setUserRole(userData.role);
+            setUserData(finalData);
+            setUserRole(uData.role);
             setIsAuthorized(true);
           } else if (firebaseUser.email === "shakar0406@gmail.com") {
             // Auto-provision the super admin
             const role = "admin";
-            await setDoc(doc(db, 'users', firebaseUser.uid), {
+            const adminData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               displayName: firebaseUser.displayName || "Super Admin",
               role: role,
               createdAt: new Date().toISOString()
-            });
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), adminData);
+            setUserData(adminData);
             setUserRole(role);
             setIsAuthorized(true);
           } else {
             // User exists in Firebase Auth but not in our 'users' collection
+            setUserData(null);
             setUserRole(null);
             setIsAuthorized(false);
           }
         }
       } else {
+        setUserData(null);
         setUserRole(null);
         setIsAuthorized(false);
       }
@@ -84,7 +96,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   return (
-    <FirebaseContext.Provider value={{ user, userRole, isAuthorized, loading }}>
+    <FirebaseContext.Provider value={{ user, userRole, userData, isAuthorized, loading }}>
       {children}
     </FirebaseContext.Provider>
   );

@@ -69,16 +69,18 @@
     },
     "AuditLog": {
       "title": "AuditLog",
-      "description": "Record of changes in the system",
+      "description": "Record of changes and events in the system",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "user_id": { "type": "string" },
+        "user_email": { "type": "string" },
         "user_name": { "type": "string" },
+        "type": { "type": "string", "enum": ["login", "logout", "action"] },
         "action": { "type": "string" },
         "target_id": { "type": "string" },
         "target_type": { "type": "string" },
-        "changes": { "type": "object" },
+        "metadata": { "type": "object" },
         "timestamp": { "type": "string", "format": "date-time" }
       }
     }

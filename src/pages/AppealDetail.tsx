@@ -29,6 +29,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc, query, where, orderBy, getDocs, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
+import { logEvent } from "../utils/logger";
 import { 
   COMPLAINT_CLASSIFICATIONS, 
   CLASSIFICATION_SECTIONS, 
@@ -305,6 +306,16 @@ export default function AppealDetail() {
         timestamp: new Date().toISOString()
       });
 
+      // Log to global audit log
+      await logEvent({
+        userId: user?.uid || "system",
+        userEmail: user?.email || "",
+        userName: user?.displayName || "User",
+        type: 'action',
+        action: isNew ? `Создано обращение #${appealId?.slice(0, 8)}` : `Обновлено обращение #${appealId?.slice(0, 8)}`,
+        metadata: { appealId, clientName: appeal.client_name }
+      });
+
       // Telegram notification logic
       const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
       if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
@@ -341,6 +352,17 @@ export default function AppealDetail() {
   const handleDelete = async () => {
     try {
       await deleteDoc(doc(db, "appeals", id!));
+      
+      // Log deletion
+      await logEvent({
+        userId: user?.uid || "system",
+        userEmail: user?.email || "",
+        userName: user?.displayName || "User",
+        type: 'action',
+        action: `Удалено обращение #${id?.slice(0, 8)}`,
+        metadata: { appealId: id }
+      });
+
       navigate("/appeals");
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `appeals/${id}`);
