@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, signInAnonymously } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { doc, getDoc, setDoc, collection, query, where, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, onSnapshot, deleteDoc, getDocs } from 'firebase/firestore';
 
 interface FirebaseContextType {
   user: User | null;
@@ -40,6 +40,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setIsAuthorized(false);
         setLoading(false);
         setError(null);
+
+        // Check for quick login token
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+        if (token) {
+          signInAnonymously(auth).catch(err => {
+            console.error("Anonymous auth failed:", err);
+            setError("Ошибка при автоматическом входе");
+          });
+        }
       }
     });
 
@@ -52,24 +62,34 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLoading(true);
     setError(null);
     
-    // Listen for user data changes by email
-    const q = query(collection(db, 'users'), where('email', '==', user.email));
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+
+    // Listen for user data changes by email OR by loginToken if a token is present
+    let q = query(collection(db, 'users'), where('email', '==', user.email || ""));
+    
+    if (token) {
+      q = query(collection(db, 'users'), where('loginToken', '==', token));
+    }
+
     const unsubscribeSnapshot = onSnapshot(q, async (snapshot) => {
       try {
         if (!snapshot.empty) {
           const userDoc = snapshot.docs[0];
           const uData = userDoc.data();
           
-          // If this is a pre-added user (no UID yet) or if the UID document doesn't exist
-          if (!uData.uid || userDoc.id !== user.uid) {
+          // If this is a token-based login or a pre-added user
+          if (token || !uData.uid || userDoc.id !== user.uid) {
             const finalData = {
               ...uData,
               uid: user.uid,
               displayName: user.displayName || uData.displayName || "User",
-              lastLogin: new Date().toISOString()
+              lastLogin: new Date().toISOString(),
+              // Clear the token after first use for security
+              loginToken: null 
             };
 
-            // Link UID to the user document (using UID as the document ID is better for security rules)
+            // Link UID to the user document
             await setDoc(doc(db, 'users', user.uid), finalData);
             
             // Delete the old document if it was a pre-added one with a random ID
@@ -77,6 +97,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               await deleteDoc(doc(db, 'users', userDoc.id));
             }
             
+            // Clear URL token parameter
+            if (token) {
+              const newUrl = window.location.origin + window.location.pathname + window.location.hash;
+              window.history.replaceState({}, document.title, newUrl);
+            }
+
             setUserData(finalData);
             setUserRole(uData.role);
             setIsAuthorized(true);

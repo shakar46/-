@@ -32,6 +32,7 @@ import {
 import { useFirebase } from "../components/FirebaseProvider";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { sendTelegramMessage } from "../utils/telegram";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -93,6 +94,9 @@ const UserManagement = () => {
         return;
       }
 
+      // Generate a unique login token
+      const loginToken = crypto.randomUUID();
+
       // Add user to Firestore
       // We use a random ID because we don't have the UID yet
       const docRef = await addDoc(collection(db, "users"), {
@@ -100,7 +104,20 @@ const UserManagement = () => {
         role: newRole,
         displayName: "Новый сотрудник",
         createdAt: serverTimestamp(),
+        loginToken: loginToken
       });
+
+      // Construct login link
+      const loginLink = `${window.location.origin}${window.location.pathname}?token=${loginToken}`;
+
+      // Send Telegram notification
+      await sendTelegramMessage(
+        `👤 <b>Добавлен новый сотрудник</b>\n\n` +
+        `📧 Email: ${newEmail.trim().toLowerCase()}\n` +
+        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : 'Оператор'}\n\n` +
+        `🔗 <b>Ссылка для быстрого входа:</b>\n` +
+        `<code>${loginLink}</code>`
+      );
 
       // Log action
       await logEvent({
