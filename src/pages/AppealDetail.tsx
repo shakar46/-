@@ -47,9 +47,10 @@ const Autocomplete = ({ label, value, options, onChange, placeholder }: any) => 
   const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const filteredOptions = options.filter((o: string) => 
-    o.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredOptions = options.filter((o: string) => {
+    const option = o || "";
+    return option.toLowerCase().includes(search.toLowerCase());
+  });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -123,9 +124,10 @@ const MultiSelect = ({ label, values = [], options, onChange, placeholder }: any
   const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const filteredOptions = options.filter((o: string) => 
-    o.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredOptions = options.filter((o: string) => {
+    const option = o || "";
+    return option.toLowerCase().includes(search.toLowerCase());
+  });
 
   const toggleOption = (opt: string) => {
     const newValues = values.includes(opt) 
@@ -203,7 +205,7 @@ const MultiSelect = ({ label, values = [], options, onChange, placeholder }: any
 export default function AppealDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useFirebase();
+  const { user, userRole } = useFirebase();
   const [appeal, setAppeal] = useState<Appeal>({
     client_name: "",
     client_phone: "",
@@ -360,7 +362,7 @@ export default function AppealDetail() {
           <ChevronLeft size={20} /> Назад к списку
         </button>
         <div className="flex items-center gap-3">
-          {id !== "new" && (
+          {id !== "new" && userRole === 'admin' && (
             <button 
               onClick={() => setIsDeleteModalOpen(true)}
               className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
@@ -785,7 +787,13 @@ export default function AppealDetail() {
 
               <div className="flex-1 overflow-y-auto p-6 space-y-3">
                 {scripts
-                  .filter(s => s.title.toLowerCase().includes(scriptSearch.toLowerCase()) || s.content.toLowerCase().includes(scriptSearch.toLowerCase()))
+                  .filter(s => {
+                    const title = s.title || "";
+                    const content = s.content || "";
+                    const search = scriptSearch.toLowerCase();
+                    return title.toLowerCase().includes(search) || 
+                           content.toLowerCase().includes(search);
+                  })
                   .map(script => (
                     <button
                       key={script.id}

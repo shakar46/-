@@ -61,11 +61,16 @@ export default function Scripts() {
     }
   };
 
-  const filteredScripts = scripts.filter(s => 
-    s.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    s.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredScripts = scripts.filter(s => {
+    const title = s.title || "";
+    const content = s.content || "";
+    const category = s.category || "";
+    const search = searchQuery.toLowerCase();
+    
+    return title.toLowerCase().includes(search) || 
+           content.toLowerCase().includes(search) ||
+           category.toLowerCase().includes(search);
+  });
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin" /></div>;

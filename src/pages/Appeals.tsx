@@ -26,9 +26,11 @@ import { ru } from "date-fns/locale";
 import { motion, AnimatePresence } from "motion/react";
 import { BRANCH_NAMES } from "../constants";
 import { Appeal } from "../types";
+import { useFirebase } from "../components/FirebaseProvider";
 import * as XLSX from "xlsx";
 
 export default function Appeals() {
+  const { userRole } = useFirebase();
   const location = useLocation();
   const [appeals, setAppeals] = useState<Appeal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -434,16 +436,18 @@ export default function Appeals() {
                       </td>
                       <td className="px-6 py-5 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteConfirmId(appeal.id);
-                            }}
-                            className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                            title="Удалить"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {userRole === 'admin' && (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirmId(appeal.id);
+                              }}
+                              className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                              title="Удалить"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                           <Link 
                             to={`/appeals/${appeal.id}`}
                             onClick={(e) => e.stopPropagation()}

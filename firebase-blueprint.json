@@ -34,12 +34,14 @@
       "description": "CRM Staff member",
       "type": "object",
       "properties": {
-        "uid": { "type": "string" },
-        "email": { "type": "string" },
-        "displayName": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "operator", "manager", "analyst"] }
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "Google Account Email" },
+        "displayName": { "type": "string", "description": "User's full name" },
+        "role": { "type": "string", "enum": ["admin", "operator"], "description": "User's role in the system" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLogin": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "email", "role"]
+      "required": ["email", "role"]
     },
     "Script": {
       "title": "Script",

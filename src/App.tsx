@@ -21,7 +21,8 @@ import {
   ExternalLink,
   Users,
   LogOut,
-  LogIn
+  LogIn,
+  ShieldCheck
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
@@ -41,6 +42,7 @@ import RepeatingAppeals from "./pages/RepeatingAppeals";
 import TelegramSettings from "./pages/TelegramSettings";
 import QuickAppeal from "./pages/QuickAppeal";
 import Scripts from "./pages/Scripts";
+import UserManagement from "./pages/UserManagement";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -78,7 +80,7 @@ const SidebarItem = ({ to, icon: Icon, label, active }: SidebarItemProps) => (
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, userRole, loading: firebaseLoading } = useFirebase();
+  const { user, userRole, isAuthorized, loading: firebaseLoading } = useFirebase();
 
   const menuItems = [
     { to: "/", icon: LayoutDashboard, label: "Главная" },
@@ -87,8 +89,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/repeating", icon: Users, label: "Повторные жалобы" },
     { to: "/analytics", icon: BarChart3, label: "Аналитика" },
     { to: "/scripts", icon: FileText, label: "Скрипты" },
-    { to: "/settings", icon: Settings, label: "Настройки" },
   ];
+
+  // Admin-only items
+  if (userRole === "admin") {
+    menuItems.push({ to: "/users", icon: Users, label: "Пользователи" });
+    menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
+  }
 
   const handleLogin = async () => {
     try {
@@ -131,6 +138,34 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           >
             <LogIn size={20} />
             Войти через Google
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (user && !isAuthorized && location.pathname !== "/form") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full bg-white rounded-[2.5rem] border border-zinc-200 p-10 shadow-2xl text-center"
+        >
+          <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-8">
+            <ShieldCheck size={32} />
+          </div>
+          <h2 className="text-2xl font-bold mb-4 tracking-tight">Доступ ограничен</h2>
+          <p className="text-zinc-500 mb-8 leading-relaxed">
+            Просим прощения, вы не являетесь сотрудником данного отдела. Доступ к платформе ограничен.
+          </p>
+          
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-3 bg-black text-white py-4 rounded-2xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10"
+          >
+            <LogOut size={20} />
+            Выйти
           </button>
         </motion.div>
       </div>
@@ -251,6 +286,7 @@ export default function App() {
               <Route path="/repeating" element={<RepeatingAppeals />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/settings" element={<TelegramSettings />} />
+              <Route path="/users" element={<UserManagement />} />
               <Route path="/quick-appeal" element={<QuickAppeal />} />
               <Route path="/scripts" element={<Scripts />} />
               <Route path="/form" element={<PublicForm />} />

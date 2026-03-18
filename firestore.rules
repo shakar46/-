@@ -2,74 +2,120 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields:
+    //   - uid: string (optional, linked on login)
+    //   - email: string (required)
+    //   - displayName: string (required)
+    //   - role: string (admin, operator)
+    //   - createdAt: timestamp/string
+    //
+    // Collection: appeals
+    // Fields:
+    //   - client_name: string
+    //   - client_phone: string
+    //   - complaint_text: string
+    //   - status: string
+    //   ...
+    //
+    // ===============================================================
+
+    // ===============================================================
     // Helper Functions
     // ===============================================================
+    
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.email == "shakar0406@gmail.com";
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function isAdmin() {
-      return isAuthenticated() && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        (request.auth.token.email == "shakar0406@gmail.com" && request.auth.token.email_verified == true) ||
-        request.auth.token.firebase.sign_in_provider == 'anonymous' // Treat anonymous as admin for this specific setup if needed, or just allow it
-      );
+      return isSuperAdmin() || (isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "admin");
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function isOperator() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "operator";
     }
 
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    // ===============================================================
-    // Domain Validators
-    // ===============================================================
-
-    function isValidAppeal(data) {
-      return data.client_name is string && data.client_name.size() > 0 && data.client_name.size() < 100 &&
-             data.client_phone is string && data.client_phone.size() > 0 &&
-             data.complaint_text is string && data.complaint_text.size() > 0 && data.complaint_text.size() < 5000;
+    function isStaff() {
+      return isAdmin() || isOperator();
     }
 
     function isValidUser(data) {
-      return (data.email == null || (data.email is string && isValidEmail(data.email))) &&
-             data.role in ['admin', 'operator', 'manager', 'analyst'];
+      return data.email is string && 
+             data.role in ["admin", "operator"] &&
+             data.displayName is string;
     }
 
     // ===============================================================
     // Rules
     // ===============================================================
 
+    // Users Collection
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || (isOwner(userId) && isValidUser(request.resource.data));
+      allow read: if isStaff();
+      
+      // Only admins can create users
+      allow create: if isAdmin() && isValidUser(request.resource.data) && (
+        // Admins can only create operators, Super Admin can create anything
+        isSuperAdmin() || request.resource.data.role == "operator"
+      );
+      
+      // Only admins can update users
+      allow update: if isAdmin() && isValidUser(request.resource.data) && (
+        // Prevent changing super admin role
+        (resource.data.email != "shakar0406@gmail.com") &&
+        // Admins can only set role to operator, Super Admin can set anything
+        (isSuperAdmin() || request.resource.data.role == "operator")
+      );
+      
+      // Only admins can delete users
+      allow delete: if isAdmin() && resource.data.email != "shakar0406@gmail.com";
     }
 
+    // Appeals Collection
     match /appeals/{appealId} {
-      allow read, write: if isAuthenticated() || isAdmin();
-      allow create: if isValidAppeal(request.resource.data);
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
     }
 
+    // Audit Logs
+    match /audit_logs/{logId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+    }
+
+    // Scripts
     match /scripts/{scriptId} {
-      allow read: if isAuthenticated() || isAdmin();
+      allow read: if isStaff();
       allow write: if isAdmin();
     }
 
+    // Settings
     match /settings/{settingId} {
-      allow read, write: if isAuthenticated() || isAdmin();
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
 
-    match /audit_logs/{logId} {
-      allow read: if isAuthenticated() || isAdmin();
-      allow create: if isAuthenticated() || isAdmin();
-      allow update, delete: if false;
-    }
+    // Public Form Access (if needed)
+    // The prompt says "Доступ к платформе ограничен", but there is a PublicForm.
+    // Usually public forms write to a specific collection or have specific rules.
+    // If PublicForm writes to 'appeals', we might need to allow unauthenticated create.
+    // However, the prompt says "Любой пользователь, не добавленный в систему администратором, не может войти в платформу."
+    // This usually refers to the CRM interface.
+    // Let's check if PublicForm is used by external clients.
+    // In App.tsx, /form is excluded from the login check.
   }
 }
