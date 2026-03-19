@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { collection, addDoc, getDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
+import { sendTelegramMessage } from "../utils/telegram";
+import { logEvent } from "../utils/logger";
 import { Send, CheckCircle2, AlertCircle, Phone, User, MapPin, MessageSquare, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { BRANCH_NAMES } from "../constants";
@@ -32,30 +34,36 @@ export default function PublicForm() {
 
       const appealId = docRef.id;
 
-      // Telegram notification logic
-      const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
-      if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
-        const { telegram_token, telegram_chat_id } = settingsSnap.data();
-        if (telegram_token && telegram_chat_id) {
-          const message = `🌐 *Новое обращение с сайта*\n\n` +
-                         `ID: #${appealId.slice(0, 8)}\n` +
-                         `👤 Клиент: ${formData.client_name}\n` +
-                         `📞 Телефон: ${formData.client_phone}\n` +
-                         `📍 Филиал: ${formData.branch_name}\n` +
-                         `📝 Текст: ${formData.complaint_text}\n\n` +
-                         `🔗 [Открыть в CRM](${window.location.origin}/#/appeals/${appealId})`;
-          
-          fetch(`https://api.telegram.org/bot${telegram_token}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              chat_id: telegram_chat_id, 
-              text: message,
-              parse_mode: "Markdown"
-            })
-          }).catch(console.error);
-        }
-      }
+      // Send Main notification
+      await sendTelegramMessage(
+        `🌐 <b>Новое обращение с сайта</b>\n\n` +
+        `🆔 ID: #${appealId.slice(0, 8)}\n` +
+        `👤 Клиент: ${formData.client_name}\n` +
+        `📞 Телефон: ${formData.client_phone}\n` +
+        `📍 Филиал: ${formData.branch_name}\n` +
+        `📝 Текст: ${formData.complaint_text}\n\n` +
+        `🔗 <a href="${window.location.origin}/#/appeals/${appealId}">Открыть в CRM</a>`
+      );
+
+      // Send Audit notification
+      await sendTelegramMessage(
+        `🛡 <b>АУДИТ: Новое обращение с сайта</b>\n\n` +
+        `👤 Кто: Публичная форма (Сайт)\n` +
+        `📝 Действие: Создано обращение через сайт\n` +
+        `🆔 ID: #${appealId.slice(0, 8)}\n` +
+        `👤 Клиент: ${formData.client_name}`,
+        'audit'
+      );
+
+      // Log action
+      await logEvent({
+        userId: "public",
+        userEmail: "public@site.com",
+        userName: "Public User",
+        type: 'action',
+        action: `Создано обращение с сайта #${appealId.slice(0, 8)}`,
+        metadata: { appealId, clientName: formData.client_name }
+      });
 
       setSubmitted(true);
     } catch (error) {
@@ -95,7 +103,7 @@ export default function PublicForm() {
           <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center">
             <span className="text-white font-bold text-xl">Ш</span>
           </div>
-          <h1 className="font-bold text-2xl tracking-tight">Шакарочка CRM</h1>
+          <h1 className="font-bold text-2xl tracking-tight">CRM Система</h1>
         </div>
 
         <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-black/5 border border-zinc-100 overflow-hidden">

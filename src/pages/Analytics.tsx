@@ -82,30 +82,68 @@ export default function Analytics() {
 
   const exportToExcel = () => {
     const dataToExport = filteredAppeals.map(a => ({
-      "ID": a.id,
-      "Дата": safeFormatDate(a.created_at, "dd.MM.yyyy HH:mm"),
-      "Клиент": a.client_name,
-      "Телефон": a.client_phone,
-      "Текст жалобы": a.complaint_text,
-      "Статус": a.status,
-      "Филиал": a.branch_name,
-      "Классификация": a.complaint_classification,
-      "Секция": a.classification_section,
-      "Комментарий": a.adjective_comment,
-      "Продукт/Сотрудник": a.product_employee,
-      "Источник": a.source
+      "Дата отзыва": safeFormatDate(a.created_at, "dd.MM.yyyy HH:mm"),
+      "Дата заказа": a.order_date || "—",
+      "Классификация жалобы": a.complaint_classification || "—",
+      "Раздел классификации": a.classification_section || "—",
+      "Прилагательный комментарий": a.adjective_comment || "—",
+      "Продукт / Сотрудник": a.product_employee || "—",
+      "Название филиала": a.branch_name || "—",
+      "Чек заказа": a.order_receipt || "—",
+      "Текст обращения": a.complaint_text || "—",
+      "Имя клиента": a.client_name || "—",
+      "Телефон": a.client_phone || "—",
+      "Источник": a.source || "—",
+      "Фотографии жалобы": (a.complaint_photos || []).join(", "),
+      "Кто принял жалобу": a.accepted_by || "—",
+      "SIP аудиозапись (ссылка)": a.sip_link || "—",
+      "Ответственный за коррекцию": a.responsible_person || "—",
+      "Статус дедлайна": a.deadline || "—",
+      "Моментальная коррекция от ответственного лица": a.instant_correction || "—",
+      "Анализ корневых причин": a.root_cause_analysis || "—",
+      "Статус для отдела мотивации": a.motivation_status || "—",
+      "Корректирующие действия": a.corrective_actions || "—"
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Жалобы");
+    
+    // Set column widths
+    const wscols = [
+      {wch: 20}, {wch: 15}, {wch: 25}, {wch: 25}, {wch: 30}, 
+      {wch: 25}, {wch: 20}, {wch: 15}, {wch: 50}, {wch: 20},
+      {wch: 15}, {wch: 15}, {wch: 50}, {wch: 20}, {wch: 30}, 
+      {wch: 25}, {wch: 20}, {wch: 40}, {wch: 40}, {wch: 25}, {wch: 40}
+    ];
+    ws['!cols'] = wscols;
+
     XLSX.writeFile(wb, `Жалобы_${format(new Date(), "dd_MM_yyyy")}.xlsx`);
   };
 
-  const filteredAppeals = getFilteredData();
+  const filteredAppeals = React.useMemo(() => getFilteredData(), [appeals, period, startDate, endDate]);
+
+  // Data for Justification Status Chart
+  const justificationData = React.useMemo(() => Object.entries(
+    filteredAppeals.reduce((acc: any, curr) => {
+      const status = curr.justification_status || "Не указано";
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {})
+  ).map(([name, value]) => ({ name, value: value as number })), [filteredAppeals]);
+
+  // Data for Motivation Status Chart
+  const motivationData = React.useMemo(() => Object.entries(
+    filteredAppeals.reduce((acc: any, curr) => {
+      const status = curr.motivation_status || "Не указан";
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {})
+  ).map(([name, value]) => ({ name, value: value as number }))
+   .sort((a, b) => b.value - a.value), [filteredAppeals]);
 
   // Data for Branch Bar Chart
-  const branchData = Object.entries(
+  const branchData = React.useMemo(() => Object.entries(
     filteredAppeals.reduce((acc: any, curr) => {
       const branch = curr.branch_name || "Не указан";
       acc[branch] = (acc[branch] || 0) + 1;
@@ -113,25 +151,25 @@ export default function Analytics() {
     }, {})
   ).map(([name, value]) => ({ name, value: value as number }))
    .sort((a, b) => b.value - a.value)
-   .slice(0, 10);
+   .slice(0, 10), [filteredAppeals]);
 
   // Data for Classification Pie Chart
-  const classificationData = Object.entries(
+  const classificationData = React.useMemo(() => Object.entries(
     filteredAppeals.reduce((acc: any, curr) => {
       const cat = curr.complaint_classification || "Другое";
       acc[cat] = (acc[cat] || 0) + 1;
       return acc;
     }, {})
-  ).map(([name, value]) => ({ name, value: value as number }));
+  ).map(([name, value]) => ({ name, value: value as number })), [filteredAppeals]);
 
   // Data for Dynamics Line Chart
-  const dynamicsData = Object.entries(
+  const dynamicsData = React.useMemo(() => Object.entries(
     filteredAppeals.reduce((acc: any, curr) => {
       const date = format(new Date(curr.created_at), "dd.MM");
       acc[date] = (acc[date] || 0) + 1;
       return acc;
     }, {})
-  ).map(([date, count]) => ({ date, count: count as number })).reverse();
+  ).map(([date, count]) => ({ date, count: count as number })).reverse(), [filteredAppeals]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin" /></div>;
@@ -260,32 +298,117 @@ export default function Analytics() {
           </div>
         </div>
 
-        {/* Summary Table */}
-        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold">Сводная статистика</h3>
-            <button 
-              onClick={exportSummaryToExcel}
-              className="text-xs font-bold text-zinc-400 hover:text-black flex items-center gap-1 transition-colors"
-            >
-              <Download size={14} /> Экспорт
-            </button>
+        {/* Motivation Pie Chart */}
+        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
+          <h3 className="text-lg font-bold mb-6">Отдел мотивации</h3>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={motivationData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {motivationData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
-          <div className="space-y-4">
-            {classificationData.slice(0, 5).map((item, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                  <span className="text-sm font-medium text-zinc-600">{item.name}</span>
+        </div>
+
+        {/* Justification Status Pie Chart */}
+        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
+          <h3 className="text-lg font-bold mb-6">Обоснованность жалоб</h3>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={justificationData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {justificationData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={entry.name === "Обосновано" ? "#10b981" : entry.name === "Необосновано" ? "#f43f5e" : "#94a3b8"} 
+                    />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Summary Tables */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 col-span-full">
+          {/* Classification Summary Table */}
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold">Сводная статистика по категориям</h3>
+              <button 
+                onClick={exportSummaryToExcel}
+                className="text-xs font-bold text-zinc-400 hover:text-black flex items-center gap-1 transition-colors"
+              >
+                <Download size={14} /> Экспорт
+              </button>
+            </div>
+            <div className="space-y-4">
+              {classificationData.slice(0, 10).map((item, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                    <span className="text-sm font-medium text-zinc-600">{item.name}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-bold">{item.value}</span>
+                    <span className="text-xs text-zinc-400 w-10 text-right">
+                      {filteredAppeals.length > 0 ? Math.round(((item.value as number) / filteredAppeals.length) * 100) : 0}%
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold">{item.value}</span>
-                  <span className="text-xs text-zinc-400 w-10 text-right">
-                    {filteredAppeals.length > 0 ? Math.round(((item.value as number) / filteredAppeals.length) * 100) : 0}%
-                  </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Motivation Summary Table */}
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold">Отдел мотивации (статистика)</h3>
+            </div>
+            <div className="space-y-4">
+              {motivationData.map((item, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[(i + 2) % COLORS.length] }} />
+                    <span className="text-sm font-medium text-zinc-600">{item.name}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-bold">{item.value}</span>
+                    <span className="text-xs text-zinc-400 w-10 text-right">
+                      {filteredAppeals.length > 0 ? Math.round(((item.value as number) / filteredAppeals.length) * 100) : 0}%
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>

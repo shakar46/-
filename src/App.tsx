@@ -46,8 +46,11 @@ import RepeatingAppeals from "./pages/RepeatingAppeals";
 import TelegramSettings from "./pages/TelegramSettings";
 import QuickAppeal from "./pages/QuickAppeal";
 import Scripts from "./pages/Scripts";
+import StandardAppeals from "./pages/StandardAppeals";
 import UserManagement from "./pages/UserManagement";
 import AuditLogs from "./pages/AuditLogs";
+import ComplaintHistory from "./pages/ComplaintHistory";
+import ComplaintResolutions from "./pages/ComplaintResolutions";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -92,14 +95,17 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/appeals", icon: MessageSquare, label: "Обращения" },
     { to: "/quick-appeal", icon: Plus, label: "Новое обращение" },
     { to: "/repeating", icon: Users, label: "Повторные жалобы" },
+    { to: "/resolutions", icon: ShieldCheck, label: "Решения" },
     { to: "/analytics", icon: BarChart3, label: "Аналитика" },
+    { to: "/standard-appeals", icon: FileText, label: "Стандартные обращения" },
     { to: "/scripts", icon: FileText, label: "Скрипты" },
   ];
 
   // Admin-only items
   if (userRole === "admin") {
     menuItems.push({ to: "/users", icon: Users, label: "Пользователи" });
-    menuItems.push({ to: "/audit", icon: History, label: "История" });
+    menuItems.push({ to: "/history", icon: History, label: "История жалоб" });
+    menuItems.push({ to: "/audit", icon: History, label: "Логи аудита" });
     menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
   }
 
@@ -160,7 +166,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <span className="text-white font-bold text-3xl">Ш</span>
           </div>
           <h2 className="text-3xl font-bold mb-4 tracking-tight">Вход в систему</h2>
-          <p className="text-zinc-500 mb-8">Используйте Google для входа в CRM Шакарочка.</p>
+          <p className="text-zinc-500 mb-8">Используйте Google для входа в CRM.</p>
           
           <button
             onClick={handleLogin}
@@ -225,8 +231,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <span className="text-white font-bold text-xl">Ш</span>
           </div>
           <div>
-            <h1 className="font-bold text-lg leading-tight">Шакарочка</h1>
-            <p className="text-xs text-zinc-400 font-medium uppercase tracking-widest">ултует CRM</p>
+            <h1 className="font-bold text-lg leading-tight">CRM</h1>
+            <p className="text-xs text-zinc-400 font-medium uppercase tracking-widest">Система управления</p>
           </div>
         </div>
 
@@ -270,7 +276,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">Ш</span>
           </div>
-          <h1 className="font-bold text-sm">Шакарочка</h1>
+          <h1 className="font-bold text-sm">CRM</h1>
         </div>
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -328,12 +334,15 @@ export default function App() {
               <Route path="/appeals" element={<Appeals />} />
               <Route path="/appeals/:id" element={<AppealDetail />} />
               <Route path="/repeating" element={<RepeatingAppeals />} />
+              <Route path="/history" element={<ComplaintHistory />} />
+              <Route path="/resolutions" element={<ComplaintResolutions />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/settings" element={<TelegramSettings />} />
               <Route path="/users" element={<UserManagement />} />
               <Route path="/audit" element={<AuditLogs />} />
               <Route path="/quick-appeal" element={<QuickAppeal />} />
               <Route path="/scripts" element={<Scripts />} />
+              <Route path="/standard-appeals" element={<StandardAppeals />} />
               <Route path="/form" element={<PublicForm />} />
             </Routes>
           </Layout>

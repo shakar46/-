@@ -39,8 +39,7 @@
         "displayName": { "type": "string", "description": "User's full name" },
         "role": { "type": "string", "enum": ["admin", "operator"], "description": "User's role in the system" },
         "createdAt": { "type": "string", "format": "date-time" },
-        "lastLogin": { "type": "string", "format": "date-time" },
-        "loginToken": { "type": "string", "description": "Token for quick login without button" }
+        "lastLogin": { "type": "string", "format": "date-time" }
       },
       "required": ["email", "role"]
     },

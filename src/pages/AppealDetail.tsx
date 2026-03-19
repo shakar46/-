@@ -30,6 +30,7 @@ import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc, query, w
 import { db, auth } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { logEvent } from "../utils/logger";
+import { sendTelegramMessage } from "../utils/telegram";
 import { 
   COMPLAINT_CLASSIFICATIONS, 
   CLASSIFICATION_SECTIONS, 
@@ -203,6 +204,15 @@ const MultiSelect = ({ label, values = [], options, onChange, placeholder }: any
   );
 };
 
+import imageCompression from "browser-image-compression";
+
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
 export default function AppealDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -224,8 +234,9 @@ export default function AppealDetail() {
     confirmed_classification: "",
     confirmed_section: ""
   });
+  const [initialAppeal, setInitialAppeal] = useState<any>(null);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [scripts, setScripts] = useState<any[]>([]);
+  const [standardAppeals, setStandardAppeals] = useState<any[]>([]);
   const [isQuickReplyOpen, setIsQuickReplyOpen] = useState(false);
   const [scriptSearch, setScriptSearch] = useState("");
   const [historySortOrder, setHistorySortOrder] = useState<'asc' | 'desc'>('desc');
@@ -233,6 +244,31 @@ export default function AppealDetail() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const options = {
+      maxSizeMB: 0.5,
+      maxWidthOrHeight: 1024,
+      useWebWorker: true
+    };
+
+    for (const file of files) {
+      try {
+        const compressedFile = await imageCompression(file, options);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setAppeal(prev => ({
+            ...prev, 
+            complaint_photos: [...(prev.complaint_photos || []), reader.result as string]
+          }));
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        console.error("Error compressing image:", error);
+      }
+    }
+  };
 
   useEffect(() => {
     if (id === "new") {
@@ -244,9 +280,11 @@ export default function AppealDetail() {
       try {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setAppeal({ id: docSnap.id, ...docSnap.data() } as Appeal);
+          const data = { id: docSnap.id, ...docSnap.data() } as Appeal;
+          setAppeal(data);
+          setInitialAppeal(data);
           fetchAuditLogs();
-          fetchScripts();
+          fetchStandardAppeals();
         }
       } catch (error) {
         handleFirestoreError(error, OperationType.GET, `appeals/${id}`);
@@ -256,13 +294,13 @@ export default function AppealDetail() {
     fetchAppeal();
   }, [id]);
 
-  const fetchScripts = async () => {
+  const fetchStandardAppeals = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, "scripts"));
+      const querySnapshot = await getDocs(collection(db, "standard_appeals"));
       const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setScripts(data);
+      setStandardAppeals(data);
     } catch (error) {
-      console.error("Error fetching scripts:", error);
+      console.error("Error fetching standard appeals:", error);
     }
   };
 
@@ -280,6 +318,20 @@ export default function AppealDetail() {
     }
   };
 
+  const FIELD_LABELS: Record<string, string> = {
+    client_name: "Имя клиента",
+    client_phone: "Телефон",
+    branch_name: "Филиал",
+    complaint_text: "Текст жалобы",
+    complaint_classification: "Классификация",
+    status: "Статус",
+    motivation_status: "Отдел мотивации",
+    solution: "Решение",
+    deadline: "Дедлайн",
+    comment: "Комментарий",
+    operator_comment: "Комментарий оператора"
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -288,6 +340,18 @@ export default function AppealDetail() {
         ...appeal,
         updated_at: new Date().toISOString()
       };
+
+      const changes: string[] = [];
+      if (!isNew && initialAppeal) {
+        Object.keys(appealData).forEach(key => {
+          if (key !== 'updated_at' && key !== 'id' && JSON.stringify(appealData[key]) !== JSON.stringify(initialAppeal[key])) {
+            const label = FIELD_LABELS[key] || key;
+            const oldVal = initialAppeal[key] || "—";
+            const newVal = appealData[key] || "—";
+            changes.push(`🔹 <b>${label}</b>: ${oldVal} ➡️ ${newVal}`);
+          }
+        });
+      }
 
       let appealId = id;
       if (isNew) {
@@ -303,6 +367,7 @@ export default function AppealDetail() {
         user_id: user?.uid || "system",
         user_name: user?.displayName || "shakar46",
         action: isNew ? "Создание обращения" : "Обновление обращения",
+        changes: changes.length > 0 ? changes.join('\n') : null,
         timestamp: new Date().toISOString()
       });
 
@@ -313,28 +378,61 @@ export default function AppealDetail() {
         userName: user?.displayName || "User",
         type: 'action',
         action: isNew ? `Создано обращение #${appealId?.slice(0, 8)}` : `Обновлено обращение #${appealId?.slice(0, 8)}`,
-        metadata: { appealId, clientName: appeal.client_name }
+        metadata: { appealId, clientName: appeal.client_name, changes: changes.length > 0 ? changes : undefined }
       });
 
-      // Telegram notification logic
-      const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
-      if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
-        const { telegram_token, telegram_chat_id } = settingsSnap.data();
-        if (telegram_token && telegram_chat_id) {
-          let message = `📢 ${isNew ? "Новое обращение" : "Обновление обращения"} #${appealId?.slice(0, 8)}\n👤 Клиент: ${appeal.client_name}\n📍 Филиал: ${appeal.branch_name}\n📝 Статус: ${appeal.status}\n🔗 Подробнее: ${window.location.origin}/#/appeals/${appealId}`;
-          
-          // Overdue notification
-          if (appeal.deadline === "Просроченно выполнен" || appeal.deadline === "Вообще не выполнен") {
-            message = `⚠️ ВНИМАНИЕ: ПРОСРОЧЕНО!\n\n${message}\n⏳ Дедлайн: ${appeal.deadline}`;
-          }
+          // Send Audit notification
+          const auditMessage = `🛡 <b>АУДИТ: ${isNew ? "Создание" : "Обновление"} обращения</b>\n\n` +
+            `👤 Кто: ${user?.displayName || "User"} (${user?.email})\n` +
+            `📝 Действие: ${isNew ? "Создано новое обращение" : "Обновлены данные обращения"}\n` +
+            `🆔 ID: #${appealId?.slice(0, 8)}\n` +
+            `👤 Клиент: ${appeal.client_name}` +
+            (changes.length > 0 ? `\n\n<b>Изменения:</b>\n${changes.join('\n')}` : "");
 
-          fetch(`https://api.telegram.org/bot${telegram_token}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: telegram_chat_id, text: message })
-          }).catch(console.error);
-        }
-      }
+          await sendTelegramMessage(auditMessage, 'audit');
+
+          // Telegram notification logic
+          const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
+          if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
+            const { telegram_token, telegram_chat_id } = settingsSnap.data();
+            if (telegram_token && telegram_chat_id) {
+              let message = `📢 ${isNew ? "Новое обращение" : "Обновление обращения"} #${appealId?.slice(0, 8)}\n👤 Клиент: ${appeal.client_name}\n📍 Филиал: ${appeal.branch_name}\n📝 Статус: ${appeal.status}\n🔗 Подробнее: ${window.location.origin}/#/appeals/${appealId}`;
+              
+              // Overdue notification
+              if (appeal.deadline === "Просроченно выполнен" || appeal.deadline === "Вообще не выполнен") {
+                message = `⚠️ ВНИМАНИЕ: ПРОСРОЧЕНО!\n\n${message}\n⏳ Дедлайн: ${appeal.deadline}`;
+              }
+
+              // Send message with photo if exists
+              if (appeal.complaint_photos && appeal.complaint_photos.length > 0) {
+                const photo = appeal.complaint_photos[0];
+                // Telegram API for sending photo with caption
+                const formData = new FormData();
+                formData.append("chat_id", telegram_chat_id);
+                formData.append("caption", message);
+                formData.append("parse_mode", "HTML");
+                
+                // If it's a base64 string, we need to convert it to a blob
+                if (photo.startsWith("data:image")) {
+                  const blob = await (await fetch(photo)).blob();
+                  formData.append("photo", blob, "photo.jpg");
+                } else {
+                  formData.append("photo", photo);
+                }
+
+                fetch(`https://api.telegram.org/bot${telegram_token}/sendPhoto`, {
+                  method: "POST",
+                  body: formData
+                }).catch(console.error);
+              } else {
+                fetch(`https://api.telegram.org/bot${telegram_token}/sendMessage`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ chat_id: telegram_chat_id, text: message, parse_mode: "HTML" })
+                }).catch(console.error);
+              }
+            }
+          }
 
       if (isNew) navigate(`/appeals/${appealId}`);
       else fetchAuditLogs();
@@ -362,6 +460,15 @@ export default function AppealDetail() {
         action: `Удалено обращение #${id?.slice(0, 8)}`,
         metadata: { appealId: id }
       });
+
+      // Send Audit notification
+      await sendTelegramMessage(
+        `🛡 <b>АУДИТ: Удаление обращения</b>\n\n` +
+        `👤 Кто: ${user?.displayName || "User"} (${user?.email})\n` +
+        `📝 Действие: Удалено обращение\n` +
+        `🆔 ID: #${id?.slice(0, 8)}`,
+        'audit'
+      );
 
       navigate("/appeals");
     } catch (error) {
@@ -430,6 +537,28 @@ export default function AppealDetail() {
                   placeholder="998901234567"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Мгновенное исправление ответственным лицом</label>
+              <textarea 
+                rows={2}
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all resize-none"
+                value={appeal.instant_correction || ""}
+                onChange={(e) => setAppeal({...appeal, instant_correction: e.target.value})}
+                placeholder="Опишите мгновенное исправление..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Решение</label>
+              <textarea 
+                rows={2}
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all resize-none"
+                value={appeal.solution || ""}
+                onChange={(e) => setAppeal({...appeal, solution: e.target.value})}
+                placeholder="Опишите принятое решение..."
+              />
             </div>
 
             <div>
@@ -552,19 +681,7 @@ export default function AppealDetail() {
                   className="hidden" 
                   accept="image/*"
                   multiple
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    files.forEach(file => {
-                      const reader = new FileReader();
-                      reader.onloadend = () => {
-                        setAppeal(prev => ({
-                          ...prev, 
-                          complaint_photos: [...(prev.complaint_photos || []), reader.result as string]
-                        }));
-                      };
-                      reader.readAsDataURL(file);
-                    });
-                  }}
+                  onChange={handlePhotoUpload}
                 />
               </label>
             </div>
@@ -598,6 +715,25 @@ export default function AppealDetail() {
                 options={MOTIVATION_STATUSES}
                 onChange={(val: string) => setAppeal({...appeal, motivation_status: val})}
               />
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Статус обоснованности</label>
+                <div className="flex gap-2">
+                  {["Обосновано", "Необосновано"].map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setAppeal({ ...appeal, justification_status: status as any })}
+                      className={cn(
+                        "flex-1 py-3 rounded-xl text-sm font-bold border transition-all",
+                        appeal.justification_status === status
+                          ? "bg-black text-white border-black"
+                          : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:border-zinc-300"
+                      )}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="bg-zinc-50/50 rounded-3xl p-6 border border-zinc-100 shadow-sm">
               <div className="flex items-center gap-2 mb-6">
@@ -808,7 +944,7 @@ export default function AppealDetail() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-3">
-                {scripts
+                {standardAppeals
                   .filter(s => {
                     const title = s.title || "";
                     const content = s.content || "";
@@ -833,9 +969,9 @@ export default function AppealDetail() {
                       <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">{script.content}</p>
                     </button>
                   ))}
-                {scripts.length === 0 && (
+                {standardAppeals.length === 0 && (
                   <div className="text-center py-12">
-                    <p className="text-sm text-zinc-400">Скрипты не найдены</p>
+                    <p className="text-sm text-zinc-400">Шаблоны не найдены</p>
                   </div>
                 )}
               </div>

@@ -94,29 +94,29 @@ const UserManagement = () => {
         return;
       }
 
-      // Generate a unique login token
-      const loginToken = crypto.randomUUID();
-
       // Add user to Firestore
       // We use a random ID because we don't have the UID yet
       const docRef = await addDoc(collection(db, "users"), {
         email: newEmail.trim().toLowerCase(),
         role: newRole,
         displayName: "Новый сотрудник",
-        createdAt: serverTimestamp(),
-        loginToken: loginToken
+        createdAt: serverTimestamp()
       });
-
-      // Construct login link
-      const loginLink = `${window.location.origin}${window.location.pathname}?token=${loginToken}`;
 
       // Send Telegram notification
       await sendTelegramMessage(
         `👤 <b>Добавлен новый сотрудник</b>\n\n` +
         `📧 Email: ${newEmail.trim().toLowerCase()}\n` +
-        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : 'Оператор'}\n\n` +
-        `🔗 <b>Ссылка для быстрого входа:</b>\n` +
-        `<code>${loginLink}</code>`
+        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : 'Оператор'}`
+      );
+
+      // Send Audit notification
+      await sendTelegramMessage(
+        `🛡 <b>АУДИТ: Добавление пользователя</b>\n\n` +
+        `👤 Кто добавил: ${currentUser?.displayName || 'Admin'} (${currentUser?.email})\n` +
+        `📧 Кого добавили: ${newEmail.trim().toLowerCase()}\n` +
+        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : 'Оператор'}`,
+        'audit'
       );
 
       // Log action
@@ -150,6 +150,14 @@ const UserManagement = () => {
     try {
       await deleteDoc(doc(db, "users", userId));
       
+      // Send Audit notification
+      await sendTelegramMessage(
+        `🛡 <b>АУДИТ: Удаление пользователя</b>\n\n` +
+        `👤 Кто удалил: ${currentUser?.displayName || 'Admin'} (${currentUser?.email})\n` +
+        `📧 Удален: ${userEmail}`,
+        'audit'
+      );
+
       // Log action
       await logEvent({
         userId: currentUser?.uid || "system",
@@ -179,6 +187,15 @@ const UserManagement = () => {
         role: newRole,
         updatedAt: serverTimestamp()
       });
+
+      // Send Audit notification
+      await sendTelegramMessage(
+        `🛡 <b>АУДИТ: Изменение роли</b>\n\n` +
+        `👤 Кто изменил: ${currentUser?.displayName || 'Admin'} (${currentUser?.email})\n` +
+        `📧 Пользователь: ${userEmail}\n` +
+        `🛡 Новая роль: ${newRole === 'admin' ? 'Администратор' : 'Оператор'}`,
+        'audit'
+      );
 
       // Log action
       await logEvent({

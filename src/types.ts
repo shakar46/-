@@ -51,4 +51,7 @@ export interface Appeal {
   completion_date?: string;
   confirmed_classification?: string;
   confirmed_section?: string;
+  solution?: string;
+  instant_correction?: string;
+  justification_status?: 'Обосновано' | 'Необосновано';
 }

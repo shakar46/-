@@ -190,18 +190,33 @@ export default function Appeals() {
 
     const exportData = filteredAppeals.map(a => ({
       "ID": a.id,
-      "Дата": safeFormatDate(a.created_at, "dd.MM.yyyy HH:mm"),
+      "Дата создания": safeFormatDate(a.created_at, "dd.MM.yyyy HH:mm"),
       "Клиент": a.client_name,
       "Телефон": a.client_phone,
       "Филиал": a.branch_name,
       "Классификация": a.complaint_classification,
+      "Раздел": a.classification_section,
       "Статус": a.status,
-      "Текст обращения": a.complaint_text
+      "Текст обращения": a.complaint_text,
+      "Решение": a.solution || "—",
+      "Дата выполнения": a.completion_date || "—",
+      "Дедлайн статус": a.deadline || "—",
+      "Отдел мотивации": a.motivation_status || "—",
+      "Источник": a.source || "—"
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Appeals");
+    
+    // Set column widths
+    const wscols = [
+      {wch: 15}, {wch: 20}, {wch: 25}, {wch: 15}, {wch: 20}, 
+      {wch: 25}, {wch: 25}, {wch: 15}, {wch: 50}, {wch: 50},
+      {wch: 20}, {wch: 20}, {wch: 20}, {wch: 15}
+    ];
+    ws['!cols'] = wscols;
+
     XLSX.writeFile(wb, `Appeals_Export_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
 

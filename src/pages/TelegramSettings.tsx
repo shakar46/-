@@ -2,14 +2,17 @@ import React, { useState, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
-import { Save, Bell, BellOff, Send, ShieldCheck } from "lucide-react";
+import { Save, Bell, BellOff, Send, ShieldCheck, History } from "lucide-react";
 import { motion } from "motion/react";
 
 export default function TelegramSettings() {
   const [settings, setSettings] = useState({
     telegram_token: "",
     telegram_chat_id: "",
-    notifications_enabled: true
+    notifications_enabled: true,
+    audit_token: "",
+    audit_chat_id: "",
+    audit_enabled: false
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,20 +55,25 @@ export default function TelegramSettings() {
     setSaving(false);
   };
 
-  const testNotification = async () => {
-    if (!settings.telegram_token || !settings.telegram_chat_id) {
+  const testNotification = async (type: 'main' | 'audit') => {
+    const token = type === 'main' ? settings.telegram_token : settings.audit_token;
+    const chatId = type === 'main' ? settings.telegram_chat_id : settings.audit_chat_id;
+
+    if (!token || !chatId) {
       alert("Пожалуйста, заполните токен и ID чата.");
       return;
     }
     setTestStatus("loading");
     try {
-      const message = "🔔 Тестовое уведомление из CRM Шакарочка. Интеграция настроена успешно!";
-      const url = `https://api.telegram.org/bot${settings.telegram_token}/sendMessage`;
+      const message = type === 'main' 
+        ? "🔔 Тестовое уведомление из CRM. Интеграция настроена успешно!"
+        : "🛡 Тестовое уведомление Журнала Аудита. Интеграция настроена успешно!";
+      const url = `https://api.telegram.org/bot${token}/sendMessage`;
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chat_id: settings.telegram_chat_id,
+          chat_id: chatId,
           text: message
         })
       });
@@ -163,7 +171,7 @@ export default function TelegramSettings() {
                 )}
               </button>
               <button
-                onClick={testNotification}
+                onClick={() => testNotification('main')}
                 disabled={testStatus === "loading"}
                 className="px-6 flex items-center justify-center gap-2 bg-zinc-100 text-black py-3 rounded-xl font-bold hover:bg-zinc-200 transition-all"
               >
@@ -186,6 +194,64 @@ export default function TelegramSettings() {
                 {testStatus === "error" && "❌ Ошибка при отправке. Проверьте токен и ID чата."}
               </motion.div>
             )}
+          </div>
+
+          {/* Audit Bot Settings */}
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={settings.audit_enabled ? "text-amber-500" : "text-zinc-400"}>
+                  <History size={24} />
+                </div>
+                <div>
+                  <h3 className="font-bold">Журнал Аудита (Второй бот)</h3>
+                  <p className="text-xs text-zinc-400">Уведомления об изменениях в системе</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSettings({ ...settings, audit_enabled: !settings.audit_enabled })}
+                className={`w-14 h-8 rounded-full transition-all relative ${settings.audit_enabled ? 'bg-black' : 'bg-zinc-200'}`}
+              >
+                <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${settings.audit_enabled ? 'left-7' : 'left-1'}`} />
+              </button>
+            </div>
+
+            <div className="h-px bg-zinc-100" />
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Токен Аудит-бота</label>
+                <input
+                  type="password"
+                  value={settings.audit_token || ""}
+                  onChange={(e) => setSettings({ ...settings, audit_token: e.target.value })}
+                  placeholder="Токен второго бота"
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">ID чата для Аудита</label>
+                <input
+                  type="text"
+                  value={settings.audit_chat_id || ""}
+                  onChange={(e) => setSettings({ ...settings, audit_chat_id: e.target.value })}
+                  placeholder="ID другого чата"
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 flex gap-3">
+              <button
+                onClick={() => testNotification('audit')}
+                disabled={testStatus === "loading"}
+                className="w-full flex items-center justify-center gap-2 bg-zinc-100 text-black py-3 rounded-xl font-bold hover:bg-zinc-200 transition-all"
+              >
+                <Send size={18} />
+                Тестировать Аудит-бота
+              </button>
+            </div>
           </div>
         </div>
 

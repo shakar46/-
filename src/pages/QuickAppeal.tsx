@@ -2,6 +2,9 @@ import React, { useState } from "react";
 import { collection, addDoc, getDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
+import { sendTelegramMessage } from "../utils/telegram";
+import { logEvent } from "../utils/logger";
+import { useFirebase } from "../components/FirebaseProvider";
 import { 
   Send, 
   CheckCircle2, 
@@ -17,7 +20,10 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { BRANCH_NAMES } from "../constants";
 
+import imageCompression from "browser-image-compression";
+
 export default function QuickAppeal() {
+  const { user } = useFirebase();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [formData, setFormData] = useState({
@@ -37,17 +43,27 @@ export default function QuickAppeal() {
     setFormData({ ...formData, client_phone: value });
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({
-          ...prev,
-          complaint_photos: [...prev.complaint_photos, reader.result as string]
-        }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        const options = {
+          maxSizeMB: 0.5,
+          maxWidthOrHeight: 1024,
+          useWebWorker: true
+        };
+        const compressedFile = await imageCompression(file, options);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setFormData(prev => ({
+            ...prev,
+            complaint_photos: [...prev.complaint_photos, reader.result as string]
+          }));
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        console.error("Error compressing image:", error);
+      }
     }
   };
 
@@ -70,31 +86,46 @@ export default function QuickAppeal() {
       });
       
       const appealId = docRef.id;
+      
+      // Send Main notification with photos if available
+      const messageText = `🚀 <b>Новое быстрое обращение</b>\n\n` +
+        `🆔 ID: #${appealId.slice(0, 8)}\n` +
+        `👤 Клиент: ${formData.client_name}\n` +
+        `📞 Телефон: ${formData.client_phone}\n` +
+        `📍 Филиал: ${formData.branch_name}\n` +
+        `📝 Текст: ${formData.complaint_text}\n\n` +
+        `🔗 <a href="${window.location.origin}/#/appeals/${appealId}">Открыть в CRM</a>`;
 
-      // Telegram notification logic
-      const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
-      if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
-        const { telegram_token, telegram_chat_id } = settingsSnap.data();
-        if (telegram_token && telegram_chat_id) {
-          const message = `🚀 *Новое быстрое обращение*\n\n` +
-                         `ID: #${appealId.slice(0, 8)}\n` +
-                         `👤 Клиент: ${formData.client_name}\n` +
-                         `📞 Телефон: ${formData.client_phone}\n` +
-                         `📍 Филиал: ${formData.branch_name}\n` +
-                         `📝 Текст: ${formData.complaint_text}\n\n` +
-                         `🔗 [Открыть в CRM](${window.location.origin}/#/appeals/${appealId})`;
-          
-          fetch(`https://api.telegram.org/bot${telegram_token}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              chat_id: telegram_chat_id, 
-              text: message,
-              parse_mode: "Markdown"
-            })
-          }).catch(console.error);
+      if (formData.complaint_photos && formData.complaint_photos.length > 0) {
+        // Send first photo with caption
+        await sendTelegramMessage(messageText, 'main', formData.complaint_photos[0]);
+        // Send remaining photos
+        for (let i = 1; i < formData.complaint_photos.length; i++) {
+          await sendTelegramMessage(`Фото ${i + 1} к обращению #${appealId.slice(0, 8)}`, 'main', formData.complaint_photos[i]);
         }
+      } else {
+        await sendTelegramMessage(messageText);
       }
+
+      // Send Audit notification
+      await sendTelegramMessage(
+        `🛡 <b>АУДИТ: Новое быстрое обращение</b>\n\n` +
+        `👤 Кто: ${user?.displayName || "Система/Публичная форма"} (${user?.email || "N/A"})\n` +
+        `📝 Действие: Создано быстрое обращение\n` +
+        `🆔 ID: #${appealId.slice(0, 8)}\n` +
+        `👤 Клиент: ${formData.client_name}`,
+        'audit'
+      );
+
+      // Log action
+      await logEvent({
+        userId: user?.uid || "system",
+        userEmail: user?.email || "N/A",
+        userName: user?.displayName || "System",
+        type: 'action',
+        action: `Создано быстрое обращение #${appealId.slice(0, 8)}`,
+        metadata: { appealId, clientName: formData.client_name }
+      });
 
       setStatus("success");
       setFormData({

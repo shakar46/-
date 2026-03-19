@@ -86,7 +86,7 @@ export default function Dashboard() {
     <div className="space-y-10">
       <header>
         <h1 className="text-4xl font-bold tracking-tight mb-2">Обзор системы</h1>
-        <p className="text-zinc-500 text-lg font-medium">Добро пожаловать в CRM Шакарочка. Вот что происходит сегодня.</p>
+        <p className="text-zinc-500 text-lg font-medium">Добро пожаловать в CRM. Вот что происходит сегодня.</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
