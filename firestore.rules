@@ -95,6 +95,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Standard Appeals Collection
+    match /standard_appeals/{appealId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
     // Audit Logs (Appeal specific)
     match /audit_logs/{logId} {
       allow read: if isStaff();

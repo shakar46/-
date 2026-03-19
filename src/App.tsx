@@ -51,6 +51,7 @@ import UserManagement from "./pages/UserManagement";
 import AuditLogs from "./pages/AuditLogs";
 import ComplaintHistory from "./pages/ComplaintHistory";
 import ComplaintResolutions from "./pages/ComplaintResolutions";
+import AnalyticsDetail from "./pages/AnalyticsDetail";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -337,6 +338,7 @@ export default function App() {
               <Route path="/history" element={<ComplaintHistory />} />
               <Route path="/resolutions" element={<ComplaintResolutions />} />
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/analytics/:type" element={<AnalyticsDetail />} />
               <Route path="/settings" element={<TelegramSettings />} />
               <Route path="/users" element={<UserManagement />} />
               <Route path="/audit" element={<AuditLogs />} />

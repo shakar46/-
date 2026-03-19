@@ -70,3 +70,36 @@ export async function sendTelegramMessage(text: string, type: 'main' | 'audit' =
     return false;
   }
 }
+
+export async function sendTelegramFile(file: Blob, fileName: string, caption: string, type: 'main' | 'audit' = 'main') {
+  try {
+    const docRef = doc(db, "settings", "telegram");
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) return false;
+
+    const settings = docSnap.data();
+    const token = type === 'main' ? settings.telegram_token : settings.audit_token;
+    const chatId = type === 'main' ? settings.telegram_chat_id : settings.audit_chat_id;
+    const enabled = type === 'main' ? settings.notifications_enabled : settings.audit_enabled;
+
+    if (!enabled || !token || !chatId) return false;
+
+    const url = `https://api.telegram.org/bot${token}/sendDocument`;
+    const formData = new FormData();
+    formData.append('chat_id', chatId);
+    formData.append('document', file, fileName);
+    formData.append('caption', caption);
+    formData.append('parse_mode', 'HTML');
+
+    const response = await fetch(url, {
+      method: "POST",
+      body: formData
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error("Error sending Telegram file:", error);
+    return false;
+  }
+}

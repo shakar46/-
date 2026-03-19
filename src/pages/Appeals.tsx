@@ -188,21 +188,27 @@ export default function Appeals() {
       }
     };
 
+    const truncate = (str: string, max: number = 32700) => {
+      if (!str) return "";
+      const s = String(str);
+      return s.length > max ? s.substring(0, max) + "..." : s;
+    };
+
     const exportData = filteredAppeals.map(a => ({
-      "ID": a.id,
+      "ID": truncate(a.id),
       "Дата создания": safeFormatDate(a.created_at, "dd.MM.yyyy HH:mm"),
-      "Клиент": a.client_name,
-      "Телефон": a.client_phone,
-      "Филиал": a.branch_name,
-      "Классификация": a.complaint_classification,
-      "Раздел": a.classification_section,
-      "Статус": a.status,
-      "Текст обращения": a.complaint_text,
-      "Решение": a.solution || "—",
-      "Дата выполнения": a.completion_date || "—",
-      "Дедлайн статус": a.deadline || "—",
-      "Отдел мотивации": a.motivation_status || "—",
-      "Источник": a.source || "—"
+      "Клиент": truncate(a.client_name),
+      "Телефон": truncate(a.client_phone),
+      "Филиал": truncate(a.branch_name),
+      "Классификация": truncate(a.complaint_classification),
+      "Раздел": truncate(a.classification_section),
+      "Статус": truncate(a.status),
+      "Текст обращения": truncate(a.complaint_text),
+      "Решение": truncate(a.solution || "—"),
+      "Дата выполнения": truncate(a.completion_date || "—"),
+      "Дедлайн статус": truncate(a.deadline || "—"),
+      "Отдел мотивации": truncate(a.motivation_status || "—"),
+      "Источник": truncate(a.source || "—")
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);

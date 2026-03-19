@@ -244,6 +244,7 @@ export default function AppealDetail() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -659,16 +660,24 @@ export default function AppealDetail() {
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
                     />
-                    <button 
-                      onClick={() => {
-                        const newPhotos = [...(appeal.complaint_photos || [])];
-                        newPhotos.splice(index, 1);
-                        setAppeal({...appeal, complaint_photos: newPhotos});
-                      }}
-                      className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                    >
-                      <X size={14} />
-                    </button>
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <button 
+                        onClick={() => setSelectedPhoto(photo)}
+                        className="p-2 bg-white text-black rounded-xl font-bold text-[10px] uppercase tracking-widest hover:scale-105 transition-all"
+                      >
+                        Увеличить
+                      </button>
+                      <button 
+                        onClick={() => {
+                          const newPhotos = [...(appeal.complaint_photos || [])];
+                          newPhotos.splice(index, 1);
+                          setAppeal({...appeal, complaint_photos: newPhotos});
+                        }}
+                        className="p-2 bg-rose-500 text-white rounded-xl hover:scale-105 transition-all"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -980,7 +989,36 @@ export default function AppealDetail() {
         )}
       </AnimatePresence>
 
-      {/* Delete Confirmation Modal */}
+      {/* Photo Enlargement Modal */}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <div 
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md cursor-zoom-out"
+            onClick={() => setSelectedPhoto(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative max-w-full max-h-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img 
+                src={selectedPhoto} 
+                alt="Enlarged" 
+                className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain"
+                referrerPolicy="no-referrer"
+              />
+              <button 
+                onClick={() => setSelectedPhoto(null)}
+                className="absolute -top-12 right-0 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"
+              >
+                <X size={24} />
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {isDeleteModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
