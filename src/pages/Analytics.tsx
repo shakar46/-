@@ -25,7 +25,6 @@ export default function Analytics() {
   const [isSendingToTelegram, setIsSendingToTelegram] = useState(false);
   const [showComparison, setShowComparison] = useState(true);
   const [branchSortOrder, setBranchSortOrder] = useState<"desc" | "asc">("desc");
-  const [tableSortConfig, setTableSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   useEffect(() => {
     const fetchAppeals = async () => {
@@ -101,20 +100,6 @@ export default function Analytics() {
   const filteredAppeals = React.useMemo(() => getFilteredData(), [appeals, period, startDate, endDate]);
   const previousAppeals = React.useMemo(() => getPreviousPeriodData(), [appeals, period, startDate, endDate]);
 
-  const sortedAppeals = React.useMemo(() => {
-    let sortableItems = [...filteredAppeals];
-    if (tableSortConfig !== null) {
-      sortableItems.sort((a, b) => {
-        const aValue = a[tableSortConfig.key];
-        const bValue = b[tableSortConfig.key];
-        if (aValue < bValue) return tableSortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return tableSortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return sortableItems;
-  }, [filteredAppeals, tableSortConfig]);
-
   const safeFormatDate = (dateVal: any, formatStr: string) => {
     try {
       if (!dateVal) return "—";
@@ -132,6 +117,15 @@ export default function Analytics() {
     "Заводская", "Ривьера", "Сайрам", "Фергана", "Тарас Шевченко", "Куйлюк", 
     "Депо Молл", "ТТЗ", "Сагбан", "Дарк китчен", "Хай Таун", "Ибн Сино", 
     "Мирабад", "Андижан", "Джиззах", "Колл Центр", "Янгиюль", "Чирчик"
+  ];
+
+  const WEEKLY_CATEGORIES = [
+    "Вкус", "Запах", "Внешний вид", "Пищевое отравление", "Инородное тело", 
+    "Аллергические реакции", "Обслуживание (официанта, хостеса, менеджера, сотрудника зала)", 
+    "Сроки доставки", "Состояние продукта при доставке", "Обслуживание курьера", 
+    "Перепутаница", "Не доставлен вообще", "Недоложили", "Вид упаковки", 
+    "Информационная технология", "Колл центр", "Кухня", "Специфические качества", 
+    "Пищевая безопасность", "Доставка", "Упаковка", "Пресный вкус", "Слабый вкус", "Яркий вкус"
   ];
 
   const truncate = (str: string, max: number = 32700) => {
@@ -166,46 +160,56 @@ export default function Analytics() {
         "Решение": truncate(a.solution || "—")
       }));
     } else {
-      // Weekly report format
-      // Filter data for "Кухня" (Kitchen)
-      const kitchenData = data.filter(a => 
-        a.motivation_status === "КУХНЯ" || 
-        a.complaint_classification === "Кухня"
-      );
-
-      return WEEKLY_BRANCHES.map(branch => {
-        const branchAppeals = kitchenData.filter(a => a.branch_name === branch);
-        const justifiedCount = branchAppeals.filter(a => a.justification_status === "Обосновано").length;
-        const texts = branchAppeals.map(a => a.complaint_text).filter(Boolean).join(" -- ");
-        const corrections = branchAppeals.map(a => a.instant_correction).filter(Boolean).join(" -- ");
-
-        return {
-          "Кухня": branch,
-          "вкус": justifiedCount > 0 ? justifiedCount : "",
-          "Текст обращения": truncate(texts || ""),
-          "Моментальная коррекция": truncate(corrections || "")
-        };
+      // Weekly report format (TZ Implementation)
+      const reportData: any[] = [];
+      
+      WEEKLY_BRANCHES.forEach(branch => {
+        const branchAppeals = data.filter(a => a.branch_name === branch);
+        
+        WEEKLY_CATEGORIES.forEach(category => {
+          const categoryAppeals = branchAppeals.filter(a => 
+            a.complaint_classification === category || 
+            a.classification_section === category
+          );
+          
+          if (categoryAppeals.length === 0) return;
+          
+          const justifiedAppeals = categoryAppeals.filter(a => a.justification_status === "Обосновано");
+          const count = justifiedAppeals.length;
+          
+          const texts = categoryAppeals.map(a => a.complaint_text).filter(Boolean).join(" \\--\\ ");
+          const corrections = justifiedAppeals.map(a => a.instant_correction).filter(Boolean).join(" \\--\\ ");
+          
+          reportData.push({
+            "Филиалы": branch,
+            "Категории": count > 0 ? `${category} (${count})` : "",
+            "Текст обращения": truncate(texts),
+            "Моментальная коррекция": count > 0 ? truncate(corrections) : ""
+          });
+        });
       });
+      
+      return reportData;
     }
   };
 
   const sendExcelToTelegram = async (type: 'daily' | 'weekly' = 'daily') => {
     setIsSendingToTelegram(true);
     try {
-      const dataToExport = getExcelData(sortedAppeals, type);
+      const dataToExport = getExcelData(filteredAppeals, type);
       const ws = XLSX.utils.json_to_sheet(dataToExport);
       const wb = XLSX.utils.book_new();
-      const sheetName = type === 'daily' ? "Стандартный отчёт" : "Отчёт свод";
+      const sheetName = type === 'daily' ? "Стандартный отчёт" : "Кухня";
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
-      const fileName = `${type === 'daily' ? 'Стандартный' : 'Свод'}_отчет_${format(new Date(), "dd_MM_yyyy")}.xlsx`;
+      const fileName = `${type === 'daily' ? 'Стандартный' : 'Недельный'}_отчет_${format(new Date(), "dd_MM_yyyy")}.xlsx`;
       const periodText = period === 'custom' ? `${startDate} - ${endDate}` : 
                         period === 'day' ? 'Сегодня' :
                         period === 'week' ? 'Эта неделя' :
                         period === 'month' ? 'Этот месяц' : 'Этот год';
-      const caption = `📊 <b>${sheetName}</b>\n📅 Период: ${periodText}\n📈 Всего записей: ${dataToExport.length}`;
+      const caption = `📊 <b>${type === 'daily' ? 'Стандартный отчёт' : 'Недельный отчёт (Кухня)'}</b>\n📅 Период: ${periodText}\n📈 Всего записей: ${dataToExport.length}`;
       
       const success = await sendTelegramFile(blob, fileName, caption);
       if (success) alert("Файл успешно отправлен в Telegram");
@@ -218,10 +222,10 @@ export default function Analytics() {
   };
 
   const exportToExcel = (type: 'daily' | 'weekly' = 'daily') => {
-    const dataToExport = getExcelData(sortedAppeals, type);
+    const dataToExport = getExcelData(filteredAppeals, type);
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
-    const sheetName = type === 'daily' ? "Стандартный отчёт" : "Отчёт свод";
+    const sheetName = type === 'daily' ? "Стандартный отчёт" : "Кухня";
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
     
     if (type === 'daily') {
@@ -234,12 +238,12 @@ export default function Analytics() {
       ws['!cols'] = wscols;
     } else {
       const wscols = [
-        {wch: 30}, {wch: 10}, {wch: 60}, {wch: 60}
+        {wch: 30}, {wch: 30}, {wch: 60}, {wch: 60}
       ];
       ws['!cols'] = wscols;
     }
 
-    XLSX.writeFile(wb, `${type === 'daily' ? 'Стандартный' : 'Свод'}_отчет_${format(new Date(), "dd_MM_yyyy")}.xlsx`);
+    XLSX.writeFile(wb, `${type === 'daily' ? 'Стандартный' : 'Недельный'}_отчет_${format(new Date(), "dd_MM_yyyy")}.xlsx`);
   };
 
   const getTrend = (current: number, previous: number) => {
@@ -720,27 +724,6 @@ export default function Analytics() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-
-        {/* Complaints Table */}
-        <div className="col-span-full bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-zinc-100 bg-zinc-50/50 flex items-center justify-between">
-            <h3 className="font-bold">Список обращений</h3>
-            <span className="text-xs text-zinc-400 font-medium">{filteredAppeals.length} записей</span>
-          </div>
-          <div className="overflow-x-auto">
-            <ComplaintsTable 
-              data={sortedAppeals} 
-              sortConfig={tableSortConfig}
-              onSort={(key) => {
-                let direction: 'asc' | 'desc' = 'asc';
-                if (tableSortConfig && tableSortConfig.key === key && tableSortConfig.direction === 'asc') {
-                  direction = 'desc';
-                }
-                setTableSortConfig({ key, direction });
-              }}
-            />
           </div>
         </div>
       </div>
