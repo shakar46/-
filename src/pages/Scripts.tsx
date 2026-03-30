@@ -13,7 +13,7 @@ export default function Scripts() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [editingScript, setEditingScript] = useState<any>(null);
   const [scriptToDelete, setScriptToDelete] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ title: "", content: "", category: "Общее" });
+  const [formData, setFormData] = useState({ title: "", content: "", category: "Скрипты гостей" });
 
   useEffect(() => {
     fetchScripts();
@@ -42,7 +42,7 @@ export default function Scripts() {
       
       setIsModalOpen(false);
       setEditingScript(null);
-      setFormData({ title: "", content: "", category: "Общее" });
+      setFormData({ title: "", content: "", category: "Скрипты гостей" });
       fetchScripts();
     } catch (error) {
       handleFirestoreError(error, editingScript ? OperationType.UPDATE : OperationType.CREATE, "scripts");
@@ -60,6 +60,12 @@ export default function Scripts() {
       handleFirestoreError(error, OperationType.DELETE, `scripts/${scriptToDelete}`);
     }
   };
+
+  const CATEGORIES = [
+    "Скрипты гостей",
+    "Скрипты входящих запросов",
+    "Скрипты стандартных обращений"
+  ];
 
   const filteredScripts = scripts.filter(s => {
     const title = s.title || "";
@@ -86,7 +92,7 @@ export default function Scripts() {
         <button
           onClick={() => {
             setEditingScript(null);
-            setFormData({ title: "", content: "", category: "Общее" });
+            setFormData({ title: "", content: "", category: "Скрипты гостей" });
             setIsModalOpen(true);
           }}
           className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10"
@@ -100,71 +106,94 @@ export default function Scripts() {
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
         <input
           type="text"
-          placeholder="Поиск по названию, содержанию или категории..."
+          placeholder="Поиск по названию или содержанию..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full bg-white border border-zinc-200 rounded-2xl pl-12 pr-4 py-4 text-lg focus:ring-4 focus:ring-black/5 focus:border-black outline-none transition-all shadow-sm"
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <AnimatePresence>
-          {filteredScripts.map((script) => (
-            <motion.div
-              key={script.id}
-              layout
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-shadow group relative"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400 group-hover:text-black transition-colors">
-                  <FileText size={20} />
-                </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button 
-                    onClick={() => {
-                      setEditingScript(script);
-                      setFormData({ title: script.title, content: script.content, category: script.category });
-                      setIsModalOpen(true);
-                    }}
-                    className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-50 rounded-lg transition-all"
-                  >
-                    <Edit size={16} />
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setScriptToDelete(script.id);
-                      setIsDeleteModalOpen(true);
-                    }}
-                    className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+      <div className="space-y-12">
+        {CATEGORIES.map(category => {
+          const categoryScripts = filteredScripts.filter(s => s.category === category);
+          if (categoryScripts.length === 0 && !searchQuery) return null;
+          if (categoryScripts.length === 0 && searchQuery) return null;
+
+          return (
+            <section key={category} className="space-y-6">
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-bold">{category}</h2>
+                <div className="flex-1 h-px bg-zinc-100" />
+                <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
+                  {categoryScripts.length} скриптов
+                </span>
               </div>
-              <span className="inline-block px-2 py-1 rounded-lg bg-zinc-100 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">
-                {script.category}
-              </span>
-              <h3 className="text-lg font-bold mb-2 line-clamp-1">{script.title}</h3>
-              <p className="text-sm text-zinc-500 line-clamp-3 leading-relaxed mb-4">
-                {script.content}
-              </p>
-              <button 
-                onClick={() => {
-                  setEditingScript(script);
-                  setFormData({ title: script.title, content: script.content, category: script.category });
-                  setIsModalOpen(true);
-                }}
-                className="w-full flex items-center justify-between text-xs font-bold text-zinc-400 group-hover:text-black transition-colors pt-4 border-t border-zinc-50"
-              >
-                Читать полностью
-                <ChevronRight size={14} />
-              </button>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <AnimatePresence>
+                  {categoryScripts.map((script) => (
+                    <motion.div
+                      key={script.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-shadow group relative"
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400 group-hover:text-black transition-colors">
+                          <FileText size={20} />
+                        </div>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={() => {
+                              setEditingScript(script);
+                              setFormData({ title: script.title, content: script.content, category: script.category });
+                              setIsModalOpen(true);
+                            }}
+                            className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-50 rounded-lg transition-all"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setScriptToDelete(script.id);
+                              setIsDeleteModalOpen(true);
+                            }}
+                            className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <h3 className="text-lg font-bold mb-2 line-clamp-1">{script.title}</h3>
+                      <p className="text-sm text-zinc-500 line-clamp-3 leading-relaxed mb-4">
+                        {script.content}
+                      </p>
+                      <button 
+                        onClick={() => {
+                          setEditingScript(script);
+                          setFormData({ title: script.title, content: script.content, category: script.category });
+                          setIsModalOpen(true);
+                        }}
+                        className="w-full flex items-center justify-between text-xs font-bold text-zinc-400 group-hover:text-black transition-colors pt-4 border-t border-zinc-50"
+                      >
+                        Читать полностью
+                        <ChevronRight size={14} />
+                      </button>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </section>
+          );
+        })}
+
+        {filteredScripts.length === 0 && searchQuery && (
+          <div className="text-center py-20 bg-zinc-50 rounded-3xl border-2 border-dashed border-zinc-200">
+            <p className="text-zinc-400 font-medium">По вашему запросу ничего не найдено</p>
+          </div>
+        )}
       </div>
 
       {isModalOpen && (
@@ -199,11 +228,9 @@ export default function Scripts() {
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
                   >
-                    <option>Общее</option>
-                    <option>Жалобы</option>
-                    <option>Продажи</option>
-                    <option>Техподдержка</option>
-                    <option>Возвраты</option>
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
                   </select>
                 </div>
               </div>

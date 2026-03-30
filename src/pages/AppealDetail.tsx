@@ -21,7 +21,8 @@ import {
   Zap,
   SortAsc,
   SortDesc,
-  ChevronRight
+  ChevronRight,
+  Download
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -31,6 +32,7 @@ import { db, auth } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { logEvent } from "../utils/logger";
 import { sendTelegramMessage } from "../utils/telegram";
+import * as XLSX from "xlsx";
 import { 
   COMPLAINT_CLASSIFICATIONS, 
   CLASSIFICATION_SECTIONS, 
@@ -245,6 +247,64 @@ export default function AppealDetail() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+
+  const exportStandardReport = () => {
+    if (!appeal) return;
+
+    const formatDate = (dateStr: string | undefined, formatStr: string) => {
+      if (!dateStr) return "—";
+      try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return "—";
+        return format(date, formatStr, { locale: ru });
+      } catch (e) {
+        return "—";
+      }
+    };
+
+    const data = [
+      {
+        "Дата/время поступления жалобы в отдел": formatDate(appeal.created_at, "dd.MM.yyyy HH:mm"),
+        "Дата заказа": formatDate(appeal.order_date, "dd.MM.yyyy"),
+        "Классификация жалобы": appeal.complaint_classification || "—",
+        "Раздел классификации": appeal.classification_section || "—",
+        "Прилагательный комментарий": appeal.adjective_comment || "—",
+        "Продукт / Сотрудник": appeal.product_employee || "—",
+        "Название филиала": appeal.branch_name || "—",
+        "Чек заказа": appeal.order_receipt || "—",
+        "Краткое описание обращения": appeal.complaint_text || "—",
+        "Источник": appeal.source || "—",
+        "Имя": appeal.client_name || "—",
+        "Телефон": appeal.client_phone || "—",
+        "Образец / Фото": appeal.complaint_photos && appeal.complaint_photos.length > 0 ? `Есть (${appeal.complaint_photos.length})` : "Нет",
+        "Дополнительная информация": appeal.solution || "—",
+        "Кто принял жалобу": appeal.accepted_by || "—",
+        "SIP — аудиозапись": appeal.sip_link || "—",
+        "Ответственный за коррекцию": appeal.responsible_person || "—",
+        "Срок устранения": formatDate(appeal.completion_date, "dd.MM.yyyy"),
+        "Моментальная коррекция от ответственного лица": appeal.instant_correction || "—",
+        "Анализ корневых причин (метод «Почему»)": appeal.root_cause_analysis || "—",
+        "Статус для отдела мотивации и аналитики": appeal.motivation_status || "—",
+        "Корректирующие действия": appeal.corrective_actions || "—"
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Отчёт");
+
+    // Set column widths
+    const wscols = [
+      { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 25 }, { wch: 25 },
+      { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 40 }, { wch: 15 },
+      { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 25 },
+      { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 40 }, { wch: 40 },
+      { wch: 25 }, { wch: 40 }
+    ];
+    ws["!cols"] = wscols;
+
+    XLSX.writeFile(wb, `Стандартный_отчет_${id?.slice(0, 8)}_${format(new Date(), "dd_MM_yyyy")}.xlsx`);
+  };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -492,6 +552,14 @@ export default function AppealDetail() {
           <ChevronLeft size={20} /> Назад к списку
         </button>
         <div className="flex items-center gap-3">
+          {id !== "new" && (
+            <button 
+              onClick={exportStandardReport}
+              className="flex items-center gap-2 px-4 py-3 bg-white border border-zinc-200 text-black rounded-xl font-bold hover:bg-zinc-50 transition-all shadow-sm"
+            >
+              <Download size={20} /> ➡️ «Стандартный отчёт»
+            </button>
+          )}
           {id !== "new" && userRole === 'admin' && (
             <button 
               onClick={() => setIsDeleteModalOpen(true)}
@@ -536,6 +604,28 @@ export default function AppealDetail() {
                   value={appeal.client_phone || ""}
                   onChange={(e) => setAppeal({...appeal, client_phone: e.target.value.replace(/\D/g, "")})}
                   placeholder="998901234567"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Дата заказа</label>
+                <input 
+                  type="date" 
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
+                  value={appeal.order_date || ""}
+                  onChange={(e) => setAppeal({...appeal, order_date: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Кто принял жалобу</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
+                  value={appeal.accepted_by || ""}
+                  onChange={(e) => setAppeal({...appeal, accepted_by: e.target.value})}
+                  placeholder="ФИО специалиста..."
                 />
               </div>
             </div>
@@ -716,6 +806,29 @@ export default function AppealDetail() {
                 options={DEADLINE_STATUSES}
                 onChange={(val: string) => setAppeal({...appeal, deadline: val})}
               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Ответственный за коррекцию</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
+                  value={appeal.responsible_person || ""}
+                  onChange={(e) => setAppeal({...appeal, responsible_person: e.target.value})}
+                  placeholder="ФИО ответственного..."
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">SIP — аудиозапись</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
+                  value={appeal.sip_link || ""}
+                  onChange={(e) => setAppeal({...appeal, sip_link: e.target.value})}
+                  placeholder="Ссылка на аудиозапись..."
+                />
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Autocomplete 

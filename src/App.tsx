@@ -24,6 +24,8 @@ import {
   LogIn,
   ShieldCheck,
   History,
+  Zap,
+  HelpCircle,
   AlertCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -46,7 +48,7 @@ import RepeatingAppeals from "./pages/RepeatingAppeals";
 import TelegramSettings from "./pages/TelegramSettings";
 import QuickAppeal from "./pages/QuickAppeal";
 import Scripts from "./pages/Scripts";
-import StandardAppeals from "./pages/StandardAppeals";
+import HowTo from "./pages/HowTo";
 import UserManagement from "./pages/UserManagement";
 import AuditLogs from "./pages/AuditLogs";
 import ComplaintHistory from "./pages/ComplaintHistory";
@@ -98,8 +100,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/repeating", icon: Users, label: "Повторные жалобы" },
     { to: "/resolutions", icon: ShieldCheck, label: "Решения" },
     { to: "/analytics", icon: BarChart3, label: "Аналитика" },
-    { to: "/standard-appeals", icon: FileText, label: "Стандартные обращения" },
-    { to: "/scripts", icon: FileText, label: "Скрипты" },
+    { to: "/scripts", icon: Zap, label: "Скрипты" },
+    { to: "/how-to", icon: HelpCircle, label: "Как пользоваться" },
   ];
 
   // Admin-only items
@@ -344,7 +346,7 @@ export default function App() {
               <Route path="/audit" element={<AuditLogs />} />
               <Route path="/quick-appeal" element={<QuickAppeal />} />
               <Route path="/scripts" element={<Scripts />} />
-              <Route path="/standard-appeals" element={<StandardAppeals />} />
+              <Route path="/how-to" element={<HowTo />} />
               <Route path="/form" element={<PublicForm />} />
             </Routes>
           </Layout>

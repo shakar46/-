@@ -6,8 +6,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area
 } from "recharts";
-import { Download, Calendar, TrendingUp, Users, MessageSquare, AlertCircle, FileSpreadsheet, Send, ChevronRight } from "lucide-react";
-import { format, subDays, startOfDay, endOfDay, isWithinInterval, startOfWeek, startOfMonth, startOfYear, isAfter, isBefore, subWeeks, subMonths, subYears } from "date-fns";
+import { TrendingUp, Users, MessageSquare, AlertCircle, FileSpreadsheet, Send } from "lucide-react";
+import { format, subDays, startOfDay, endOfDay, isWithinInterval, startOfWeek, startOfMonth, startOfYear, subWeeks, subMonths, subYears } from "date-fns";
 import * as XLSX from "xlsx";
 import { ru } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
@@ -160,31 +160,42 @@ export default function Analytics() {
         "Решение": truncate(a.solution || "—")
       }));
     } else {
-      // Weekly report format (TZ Implementation)
+      // Weekly report format (Kitchen Actual Report)
       const reportData: any[] = [];
       
       WEEKLY_BRANCHES.forEach(branch => {
-        const branchAppeals = data.filter(a => a.branch_name === branch);
+        // Filter justified appeals for this branch that belong to "Kitchen" section or category
+        // We also include "Специфические качества" as it was previously linked to this report
+        const branchAppeals = data.filter(a => 
+          a.branch_name === branch && 
+          a.justification_status === "Обосновано" &&
+          (a.classification_section === "Кухня" || a.complaint_classification === "Кухня" || a.complaint_classification === "Специфические качества")
+        );
         
-        WEEKLY_CATEGORIES.forEach(category => {
-          const categoryAppeals = branchAppeals.filter(a => 
-            a.complaint_classification === category || 
-            a.classification_section === category
-          );
-          
-          if (categoryAppeals.length === 0) return;
-          
-          const justifiedAppeals = categoryAppeals.filter(a => a.justification_status === "Обосновано");
-          const count = justifiedAppeals.length;
-          
-          const texts = categoryAppeals.map(a => a.complaint_text).filter(Boolean).join(" \\--\\ ");
-          const corrections = justifiedAppeals.map(a => a.instant_correction).filter(Boolean).join(" \\--\\ ");
+        if (branchAppeals.length === 0) {
+          reportData.push({
+            "Филиалы": branch,
+            "Количество жалоб": "",
+            "Текст обращений": "",
+            "Моментальная коррекция": ""
+          });
+          return;
+        }
+        
+        // Group by category to show counts per category as requested in the "aggregated by categories" goal
+        const categories = Array.from(new Set(branchAppeals.map(a => a.complaint_classification || "Без категории")));
+        
+        categories.forEach(category => {
+          const categoryAppeals = branchAppeals.filter(a => (a.complaint_classification || "Без категории") === category);
+          const count = categoryAppeals.length;
+          const texts = categoryAppeals.map(a => a.complaint_text).filter(Boolean).join(" -- ");
+          const corrections = categoryAppeals.map(a => a.instant_correction).filter(Boolean).join(" -- ");
           
           reportData.push({
             "Филиалы": branch,
-            "Категории": count > 0 ? `${category} (${count})` : "",
-            "Текст обращения": truncate(texts),
-            "Моментальная коррекция": count > 0 ? truncate(corrections) : ""
+            "Количество жалоб": `${category} (${count})`,
+            "Текст обращений": truncate(texts),
+            "Моментальная коррекция": truncate(corrections)
           });
         });
       });
@@ -247,7 +258,12 @@ export default function Analytics() {
   };
 
   const getTrend = (current: number, previous: number) => {
-    if (previous === 0) return current > 0 ? "+100%" : "0%";
+    if (previous === 0) {
+      return {
+        label: current > 0 ? "+100%" : "0%",
+        isPositive: current === 0
+      };
+    }
     const diff = ((current - previous) / previous) * 100;
     const isPositive = diff > 0;
     return {
@@ -379,7 +395,7 @@ export default function Analytics() {
                   disabled={isSendingToTelegram}
                   className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-zinc-50 transition-colors"
                 >
-                  Отчёт свод
+                  Недельный отчёт (Кухня)
                 </button>
               </div>
             </div>
@@ -402,7 +418,7 @@ export default function Analytics() {
                   onClick={() => exportToExcel('weekly')}
                   className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-zinc-50 transition-colors"
                 >
-                  Отчёт свод
+                  Недельный отчёт (Кухня)
                 </button>
               </div>
             </div>
@@ -728,60 +744,6 @@ export default function Analytics() {
         </div>
       </div>
     </div>
-  );
-}
-
-function ComplaintsTable({ data, sortConfig, onSort }: { 
-  data: any[]; 
-  sortConfig: { key: string; direction: 'asc' | 'desc' } | null;
-  onSort: (key: string) => void;
-}) {
-  const navigate = useNavigate();
-
-  return (
-    <table className="w-full text-left border-collapse">
-      <thead>
-        <tr className="bg-zinc-50/50">
-          <th onClick={() => onSort('created_at')} className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors">Дата</th>
-          <th onClick={() => onSort('client_name')} className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors">Клиент</th>
-          <th onClick={() => onSort('branch_name')} className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors">Филиал</th>
-          <th onClick={() => onSort('complaint_classification')} className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors">Категория</th>
-          <th className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Текст</th>
-          <th onClick={() => onSort('status')} className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors">Статус</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-zinc-100">
-        {data.map((a) => (
-          <tr key={a.id} className="hover:bg-zinc-50 transition-colors cursor-pointer" onClick={() => navigate(`/appeals/${a.id}`)}>
-            <td className="px-6 py-4 text-sm text-zinc-500 whitespace-nowrap">
-              {a.created_at?.toDate ? format(a.created_at.toDate(), "dd.MM.yyyy HH:mm") : format(new Date(a.created_at), "dd.MM.yyyy HH:mm")}
-            </td>
-            <td className="px-6 py-4">
-              <div className="text-sm font-bold">{a.client_name}</div>
-              <div className="text-[10px] text-zinc-400">{a.client_phone}</div>
-            </td>
-            <td className="px-6 py-4 text-sm font-medium">{a.branch_name}</td>
-            <td className="px-6 py-4">
-              <span className="px-2 py-1 rounded-lg bg-zinc-100 text-[10px] font-bold text-zinc-500 uppercase">
-                {a.complaint_classification}
-              </span>
-            </td>
-            <td className="px-6 py-4 text-sm text-zinc-500 min-w-[200px] whitespace-normal">
-              {a.complaint_text}
-            </td>
-            <td className="px-6 py-4">
-              <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${
-                a.status === "Выполнен" ? "bg-emerald-50 text-emerald-600" :
-                a.status === "В работе" ? "bg-amber-50 text-amber-600" :
-                "bg-zinc-100 text-zinc-500"
-              }`}>
-                {a.status}
-              </span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }
 
