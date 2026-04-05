@@ -47,7 +47,9 @@ import PublicForm from "./pages/PublicForm";
 import RepeatingAppeals from "./pages/RepeatingAppeals";
 import TelegramSettings from "./pages/TelegramSettings";
 import QuickAppeal from "./pages/QuickAppeal";
+import PoisoningAppeal from "./pages/PoisoningAppeal";
 import Scripts from "./pages/Scripts";
+import RepeatedCorrectiveActions from "./pages/RepeatedCorrectiveActions";
 import HowTo from "./pages/HowTo";
 import UserManagement from "./pages/UserManagement";
 import AuditLogs from "./pages/AuditLogs";
@@ -345,7 +347,9 @@ export default function App() {
               <Route path="/users" element={<UserManagement />} />
               <Route path="/audit" element={<AuditLogs />} />
               <Route path="/quick-appeal" element={<QuickAppeal />} />
+              <Route path="/poisoning-appeal" element={<PoisoningAppeal />} />
               <Route path="/scripts" element={<Scripts />} />
+              <Route path="/scripts/repeated-actions" element={<RepeatedCorrectiveActions />} />
               <Route path="/how-to" element={<HowTo />} />
               <Route path="/form" element={<PublicForm />} />
             </Routes>

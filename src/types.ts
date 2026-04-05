@@ -54,4 +54,24 @@ export interface Appeal {
   solution?: string;
   instant_correction?: string;
   justification_status?: 'Обосновано' | 'Необосновано';
+  complaint_status?: 'Критические' | 'Значимые' | 'Незначимые';
+}
+
+export interface PoisoningAppeal {
+  id?: string;
+  appeal_id?: string; // Reference to the main appeal if linked
+  symptoms: string;
+  duration: string;
+  people_consumed: number;
+  people_symptoms: number;
+  stomach_state: 'Голодный' | 'Сытый';
+  time_after_consumption: string;
+  suspected_ingredients: string;
+  previous_cases: string;
+  medical_report: boolean;
+  is_aggressive: boolean;
+  created_at: string;
+  branch_name: string;
+  client_name: string;
+  client_phone: string;
 }

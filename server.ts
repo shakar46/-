@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import * as googleSheets from "./server/googleSheets";
+import * as googleSheets from "./server/googleSheets.ts";
 
 async function startServer() {
   const app = express();

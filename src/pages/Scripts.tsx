@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { collection, query, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
-import { Search, Plus, FileText, Trash2, Edit, Save, X, ChevronRight } from "lucide-react";
+import { Search, Plus, FileText, Trash2, Edit, Save, X, ChevronRight, Repeat } from "lucide-react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function Scripts() {
@@ -64,7 +65,8 @@ export default function Scripts() {
   const CATEGORIES = [
     "Скрипты гостей",
     "Скрипты входящих запросов",
-    "Скрипты стандартных обращений"
+    "Скрипты стандартных обращений",
+    "Повторные корневые причины"
   ];
 
   const filteredScripts = scripts.filter(s => {
@@ -114,6 +116,25 @@ export default function Scripts() {
       </div>
 
       <div className="space-y-12">
+        <section className="bg-zinc-900 p-8 rounded-[2.5rem] text-white overflow-hidden relative group">
+          <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:scale-110 transition-transform">
+            <Repeat size={120} />
+          </div>
+          <div className="relative z-10 space-y-6">
+            <h2 className="text-3xl font-bold tracking-tight">Повторные корректирующие действия</h2>
+            <p className="text-zinc-400 max-w-xl">
+              База данных типовых решений для часто возникающих проблем. Используйте проверенные методы для быстрого устранения жалоб.
+            </p>
+            <Link 
+              to="/scripts/repeated-actions"
+              className="inline-flex items-center gap-2 bg-white text-black px-6 py-3 rounded-xl font-bold hover:scale-105 transition-all"
+            >
+              Открыть базу действий
+              <ChevronRight size={18} />
+            </Link>
+          </div>
+        </section>
+
         {CATEGORIES.map(category => {
           const categoryScripts = filteredScripts.filter(s => s.category === category);
           if (categoryScripts.length === 0 && !searchQuery) return null;

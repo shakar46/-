@@ -41,7 +41,8 @@ import {
   BRANCH_NAMES, 
   SOURCES, 
   DEADLINE_STATUSES, 
-  MOTIVATION_STATUSES 
+  MOTIVATION_STATUSES,
+  COMPLAINT_STATUSES
 } from "../constants";
 import { Appeal } from "../types";
 import { useFirebase } from "../components/FirebaseProvider";
@@ -555,7 +556,7 @@ export default function AppealDetail() {
           {id !== "new" && (
             <button 
               onClick={exportStandardReport}
-              className="flex items-center gap-2 px-4 py-3 bg-white border border-zinc-200 text-black rounded-xl font-bold hover:bg-zinc-50 transition-all shadow-sm"
+              className="flex items-center gap-2 px-6 py-3 bg-zinc-100 text-black rounded-xl font-bold hover:bg-zinc-200 transition-all shadow-sm"
             >
               <Download size={20} /> ➡️ «Стандартный отчёт»
             </button>
@@ -596,6 +597,18 @@ export default function AppealDetail() {
                   onChange={(e) => setAppeal({...appeal, client_name: e.target.value})}
                 />
               </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Важность жалобы</label>
+                <select 
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all appearance-none"
+                  value={appeal.complaint_status || "Незначимые"}
+                  onChange={(e) => setAppeal({...appeal, complaint_status: e.target.value as any})}
+                >
+                  {COMPLAINT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Телефон</label>
                 <input 
@@ -909,7 +922,7 @@ export default function AppealDetail() {
         {/* Right Column: Metadata */}
         <div className="space-y-8">
           <section className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
-            <h2 className="text-xl font-bold">Статус</h2>
+            <h2 className="text-xl font-bold">Статус и Важность</h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Текущий статус</label>
@@ -923,6 +936,25 @@ export default function AppealDetail() {
                   <option>Выполнен</option>
                   <option>Отменен</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Важность жалобы</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {['Критические', 'Значимые', 'Незначимые'].map((imp) => (
+                    <button
+                      key={imp}
+                      onClick={() => setAppeal({ ...appeal, complaint_status: imp as any })}
+                      className={cn(
+                        "w-full py-3 rounded-xl text-sm font-bold border transition-all",
+                        appeal.complaint_status === imp
+                          ? "bg-black text-white border-black"
+                          : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:border-zinc-300"
+                      )}
+                    >
+                      {imp}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="flex items-center gap-3 p-4 bg-zinc-50 rounded-2xl">
                 <Clock size={20} className="text-zinc-400" />
@@ -971,42 +1003,7 @@ export default function AppealDetail() {
             </div>
           </section>
 
-          <section className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
-            <h2 className="text-xl font-bold">Доп. информация</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Кто принял жалобу</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm"
-                  value={appeal.accepted_by || ""}
-                  onChange={(e) => setAppeal({...appeal, accepted_by: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Ответственный</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm"
-                  value={appeal.responsible_person || ""}
-                  onChange={(e) => setAppeal({...appeal, responsible_person: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">SIP Аудиозапись (ссылка)</label>
-                <div className="relative">
-                  <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
-                  <input 
-                    type="text" 
-                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-10 pr-4 py-3 text-sm"
-                    placeholder="https://..."
-                    value={appeal.sip_link || ""}
-                    onChange={(e) => setAppeal({...appeal, sip_link: e.target.value})}
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
+
         </div>
       </div>
 

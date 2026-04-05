@@ -5,6 +5,7 @@ import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHand
 import { sendTelegramMessage } from "../utils/telegram";
 import { logEvent } from "../utils/logger";
 import { useFirebase } from "../components/FirebaseProvider";
+import { Link } from "react-router-dom";
 import { 
   Send, 
   CheckCircle2, 
@@ -15,10 +16,12 @@ import {
   MessageSquare, 
   Camera,
   FileText,
-  X
+  X,
+  AlertTriangle,
+  Flag
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { BRANCH_NAMES } from "../constants";
+import { BRANCH_NAMES, COMPLAINT_STATUSES } from "../constants";
 
 import imageCompression from "browser-image-compression";
 
@@ -34,6 +37,7 @@ export default function QuickAppeal() {
     complaint_text: "",
     complaint_photos: [] as string[],
     status: "Новый",
+    complaint_status: "Незначимые" as any,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   });
@@ -93,6 +97,7 @@ export default function QuickAppeal() {
         `👤 Клиент: ${formData.client_name}\n` +
         `📞 Телефон: ${formData.client_phone}\n` +
         `📍 Филиал: ${formData.branch_name}\n` +
+        `⚠️ Важность: ${formData.complaint_status}\n` +
         `📝 Текст: ${formData.complaint_text}\n\n` +
         `🔗 <a href="${window.location.origin}/#/appeals/${appealId}">Открыть в CRM</a>`;
 
@@ -136,6 +141,7 @@ export default function QuickAppeal() {
         complaint_text: "",
         complaint_photos: [],
         status: "Новый",
+        complaint_status: "Незначимые",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
@@ -148,14 +154,36 @@ export default function QuickAppeal() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
-      <header>
-        <h1 className="text-4xl font-bold tracking-tight mb-2">Новое обращение</h1>
-        <p className="text-zinc-500 text-lg">Быстрое создание жалобы или предложения.</p>
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight mb-2">Новое обращение</h1>
+          <p className="text-zinc-500 text-lg">Быстрое создание жалобы или предложения.</p>
+        </div>
+        <Link 
+          to="/poisoning-appeal"
+          className="flex items-center gap-2 bg-rose-50 text-rose-600 px-5 py-3 rounded-2xl font-bold hover:bg-rose-100 transition-all text-sm"
+        >
+          <AlertTriangle size={18} />
+          Обращение по отравлению
+        </Link>
       </header>
 
       <div className="bg-white rounded-[2.5rem] border border-zinc-200 shadow-sm overflow-hidden">
         <form onSubmit={handleSubmit} className="p-10 space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                <Flag size={12} /> Статус жалобы
+              </label>
+              <select
+                value={formData.complaint_status}
+                onChange={(e) => setFormData({ ...formData, complaint_status: e.target.value as any })}
+                className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 text-lg outline-none focus:ring-4 focus:ring-black/5 focus:border-black transition-all appearance-none"
+              >
+                {COMPLAINT_STATUSES.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
                 <MapPin size={12} /> Филиал

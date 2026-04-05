@@ -36,6 +36,7 @@ export default function Appeals() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Все");
+  const [importanceFilter, setImportanceFilter] = useState("Все");
   const [branchFilter, setBranchFilter] = useState("Все");
   const [showFilters, setShowFilters] = useState(false);
   const [sortField, setSortField] = useState<string>("created_at");
@@ -92,7 +93,7 @@ export default function Appeals() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, branchFilter]);
+  }, [searchQuery, statusFilter, branchFilter, importanceFilter]);
 
   const isNearingDeadline = (appeal: Appeal) => {
     if (!appeal.completion_date || appeal.deadline) return false;
@@ -133,12 +134,14 @@ export default function Appeals() {
     const matchesSearch = 
       a.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.client_phone?.includes(searchQuery) ||
+      a.complaint_text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (a.id && a.id.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesStatus = statusFilter === "Все" || a.status === statusFilter;
     const matchesBranch = branchFilter === "Все" || a.branch_name === branchFilter;
+    const matchesImportance = importanceFilter === "Все" || a.complaint_status === importanceFilter;
 
-    return matchesSearch && matchesStatus && matchesBranch;
+    return matchesSearch && matchesStatus && matchesBranch && matchesImportance;
   }).sort((a, b) => {
     const valA = (a as any)[sortField];
     const valB = (b as any)[sortField];
@@ -306,11 +309,25 @@ export default function Appeals() {
                     {BRANCH_NAMES.map(b => <option key={b}>{b}</option>)}
                   </select>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Важность</label>
+                  <select 
+                    value={importanceFilter}
+                    onChange={(e) => setImportanceFilter(e.target.value)}
+                    className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-2 text-sm outline-none focus:border-black transition-all"
+                  >
+                    <option>Все</option>
+                    <option>Критические</option>
+                    <option>Значимые</option>
+                    <option>Незначимые</option>
+                  </select>
+                </div>
                 <div className="flex items-end">
                   <button 
                     onClick={() => {
                       setStatusFilter("Все");
                       setBranchFilter("Все");
+                      setImportanceFilter("Все");
                       setSearchQuery("");
                     }}
                     className="text-xs font-bold text-zinc-400 hover:text-black transition-colors"
@@ -324,13 +341,13 @@ export default function Appeals() {
         </AnimatePresence>
       </div>
 
-      <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-zinc-50/50 border-b border-zinc-100">
+      <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col h-[700px]">
+        <div className="overflow-auto flex-1 custom-scrollbar">
+          <table className="w-full text-left border-separate border-spacing-0">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-zinc-50 border-b border-zinc-100">
                 <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors"
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
                   onClick={() => handleSort("created_at")}
                 >
                   <div className="flex items-center gap-2">
@@ -339,7 +356,7 @@ export default function Appeals() {
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors"
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
                   onClick={() => handleSort("client_name")}
                 >
                   <div className="flex items-center gap-2">
@@ -348,7 +365,7 @@ export default function Appeals() {
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors"
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
                   onClick={() => handleSort("complaint_classification")}
                 >
                   <div className="flex items-center gap-2">
@@ -357,7 +374,7 @@ export default function Appeals() {
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors"
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
                   onClick={() => handleSort("status")}
                 >
                   <div className="flex items-center gap-2">
@@ -366,7 +383,16 @@ export default function Appeals() {
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors"
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
+                  onClick={() => handleSort("complaint_status")}
+                >
+                  <div className="flex items-center gap-2">
+                    Важность
+                    <ArrowUpDown size={12} className={sortField === "complaint_status" ? "text-black" : "text-zinc-300"} />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
                   onClick={() => handleSort("branch_name")}
                 >
                   <div className="flex items-center gap-2">
@@ -374,29 +400,30 @@ export default function Appeals() {
                     <ArrowUpDown size={12} className={sortField === "branch_name" ? "text-black" : "text-zinc-300"} />
                   </div>
                 </th>
-                <th className="px-6 py-4"></th>
+                <th className="px-6 py-4 bg-zinc-50"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center">
+                  <td colSpan={7} className="px-6 py-20 text-center">
                     <div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : filteredAppeals.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center text-zinc-400 font-medium">
+                  <td colSpan={7} className="px-6 py-20 text-center text-zinc-400 font-medium">
                     Ничего не найдено
                   </td>
                 </tr>
               ) : (
-                paginatedAppeals.map((appeal) => (
+                paginatedAppeals.map((appeal, idx) => (
                   <React.Fragment key={appeal.id}>
                     <tr 
                       className={cn(
-                        "hover:bg-zinc-50/50 transition-colors group cursor-pointer relative",
-                        expandedRowId === appeal.id && "bg-zinc-50/80",
+                        "hover:bg-zinc-100/50 transition-colors group cursor-pointer relative",
+                        idx % 2 === 0 ? "bg-white" : "bg-zinc-50/30",
+                        expandedRowId === appeal.id && "bg-zinc-100/80",
                         isNearingDeadline(appeal) && "bg-amber-50/30",
                         isOverdue(appeal) && "bg-red-50/30"
                       )}
@@ -450,6 +477,20 @@ export default function Appeals() {
                         </span>
                       </td>
                       <td className="px-6 py-5">
+                        {appeal.complaint_status ? (
+                          <span className={cn(
+                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold",
+                            appeal.complaint_status === 'Критические' ? "bg-rose-100 text-rose-600" :
+                            appeal.complaint_status === 'Значимые' ? "bg-orange-100 text-orange-600" :
+                            "bg-blue-100 text-blue-600"
+                          )}>
+                            {appeal.complaint_status}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-5">
                         <div className="flex items-center gap-1.5 text-sm text-zinc-500 font-medium">
                           <MapPin size={14} className="text-zinc-300" />
                           {appeal.branch_name}
@@ -483,7 +524,7 @@ export default function Appeals() {
                     <AnimatePresence>
                       {expandedRowId === appeal.id && (
                         <tr>
-                          <td colSpan={6} className="px-0 py-0 border-none">
+                          <td colSpan={7} className="px-0 py-0 border-none">
                             <motion.div
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: "auto", opacity: 1 }}
@@ -555,10 +596,27 @@ export default function Appeals() {
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-xs text-zinc-400 font-medium order-2 sm:order-1">
-            Показано {filteredAppeals.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(filteredAppeals.length, currentPage * itemsPerPage)} из {filteredAppeals.length} результатов
-          </p>
+        <div className="px-6 py-4 bg-zinc-50 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4 order-2 sm:order-1">
+            <p className="text-xs text-zinc-400 font-medium">
+              Показано {filteredAppeals.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(filteredAppeals.length, currentPage * itemsPerPage)} из {filteredAppeals.length}
+            </p>
+            <div className="flex items-center gap-2 bg-white border border-zinc-200 rounded-lg px-2 py-1">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase">Стр.</span>
+              <input 
+                type="number"
+                min={1}
+                max={totalPages}
+                value={currentPage}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (val >= 1 && val <= totalPages) setCurrentPage(val);
+                }}
+                className="w-10 text-xs font-bold text-center outline-none"
+              />
+              <span className="text-[10px] font-bold text-zinc-400 uppercase">из {totalPages}</span>
+            </div>
+          </div>
           <div className="flex items-center gap-2 order-1 sm:order-2">
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -570,9 +628,8 @@ export default function Appeals() {
             
             <div className="flex items-center gap-1">
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
-                // Show only a few page numbers if there are many
                 if (
-                  totalPages <= 7 ||
+                  totalPages <= 5 ||
                   pageNum === 1 ||
                   pageNum === totalPages ||
                   (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)

@@ -13,6 +13,12 @@ import { ru } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { sendTelegramFile } from "../utils/telegram";
 
+import { 
+  BRANCH_NAMES, 
+  COMPLAINT_CLASSIFICATIONS, 
+  COMPLAINT_STATUSES 
+} from "../constants";
+
 const COLORS = ['#000000', '#3f3f46', '#71717a', '#a1a1aa', '#d4d4d8', '#e4e4e7'];
 
 export default function Analytics() {
@@ -25,6 +31,10 @@ export default function Analytics() {
   const [isSendingToTelegram, setIsSendingToTelegram] = useState(false);
   const [showComparison, setShowComparison] = useState(true);
   const [branchSortOrder, setBranchSortOrder] = useState<"desc" | "asc">("desc");
+  const [statusFilter, setStatusFilter] = useState("Все");
+  const [branchFilter, setBranchFilter] = useState("Все");
+  const [classificationFilter, setClassificationFilter] = useState("Все");
+  const [importanceFilter, setImportanceFilter] = useState("Все");
 
   useEffect(() => {
     const fetchAppeals = async () => {
@@ -42,27 +52,37 @@ export default function Analytics() {
   }, []);
 
   const getFilteredData = (targetAppeals = appeals, targetPeriod = period, targetStart = startDate, targetEnd = endDate) => {
+    let filtered = [...targetAppeals];
+
     if (targetPeriod === "custom" && targetStart && targetEnd) {
       const start = startOfDay(new Date(targetStart));
       const end = endOfDay(new Date(targetEnd));
-      return targetAppeals.filter(a => {
+      filtered = filtered.filter(a => {
         const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
         return isWithinInterval(date, { start, end });
       });
+    } else if (targetPeriod !== "custom") {
+      const now = new Date();
+      let start;
+      if (targetPeriod === "day") start = startOfDay(now);
+      else if (targetPeriod === "week") start = startOfWeek(now, { weekStartsOn: 1 });
+      else if (targetPeriod === "month") start = startOfMonth(now);
+      else if (targetPeriod === "year") start = startOfYear(now);
+      
+      if (start) {
+        filtered = filtered.filter(a => {
+          const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
+          return date.getTime() >= start.getTime();
+        });
+      }
     }
 
-    const now = new Date();
-    let start;
-    if (targetPeriod === "day") start = startOfDay(now);
-    else if (targetPeriod === "week") start = startOfWeek(now, { weekStartsOn: 1 });
-    else if (targetPeriod === "month") start = startOfMonth(now);
-    else if (targetPeriod === "year") start = startOfYear(now);
-    else return targetAppeals;
+    if (statusFilter !== "Все") filtered = filtered.filter(a => a.status === statusFilter);
+    if (branchFilter !== "Все") filtered = filtered.filter(a => a.branch_name === branchFilter);
+    if (classificationFilter !== "Все") filtered = filtered.filter(a => a.complaint_classification === classificationFilter);
+    if (importanceFilter !== "Все") filtered = filtered.filter(a => a.complaint_status === importanceFilter);
 
-    return targetAppeals.filter(a => {
-      const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
-      return date.getTime() >= start.getTime();
-    });
+    return filtered;
   };
 
   const getPreviousPeriodData = () => {
@@ -97,7 +117,7 @@ export default function Analytics() {
     });
   };
 
-  const filteredAppeals = React.useMemo(() => getFilteredData(), [appeals, period, startDate, endDate]);
+  const filteredAppeals = React.useMemo(() => getFilteredData(), [appeals, period, startDate, endDate, statusFilter, branchFilter, classificationFilter, importanceFilter]);
   const previousAppeals = React.useMemo(() => getPreviousPeriodData(), [appeals, period, startDate, endDate]);
 
   const safeFormatDate = (dateVal: any, formatStr: string) => {
@@ -111,13 +131,7 @@ export default function Analytics() {
     }
   };
 
-  const WEEKLY_BRANCHES = [
-    "Абай", "Бадамзар", "Боткина", "Бухара", "Шота Руставелли", "Мегаполис", "Новза", 
-    "Самарканд Рудаки", "Самарканд Фэмили", "Сергели", "Сеул", "Учтепа", "ЦУМ", 
-    "Заводская", "Ривьера", "Сайрам", "Фергана", "Тарас Шевченко", "Куйлюк", 
-    "Депо Молл", "ТТЗ", "Сагбан", "Дарк китчен", "Хай Таун", "Ибн Сино", 
-    "Мирабад", "Андижан", "Джиззах", "Колл Центр", "Янгиюль", "Чирчик"
-  ];
+  const WEEKLY_BRANCHES = BRANCH_NAMES;
 
   const WEEKLY_CATEGORIES = [
     "Вкус", "Запах", "Внешний вид", "Пищевое отравление", "Инородное тело", 
@@ -167,7 +181,7 @@ export default function Analytics() {
         // Filter justified appeals for this branch that belong to "Kitchen" section or category
         // We also include "Специфические качества" as it was previously linked to this report
         const branchAppeals = data.filter(a => 
-          a.branch_name === branch && 
+          a.branch_name?.toUpperCase() === branch.toUpperCase() && 
           a.justification_status === "Обосновано" &&
           (a.classification_section === "Кухня" || a.complaint_classification === "Кухня" || a.complaint_classification === "Специфические качества")
         );
@@ -330,6 +344,39 @@ export default function Analytics() {
      return new Date(y1, m1 - 1, d1).getTime() - new Date(y2, m2 - 1, d2).getTime();
    }), [filteredAppeals]);
 
+  // Data for Appeal Status Chart
+  const appealStatusData = React.useMemo(() => Object.entries(
+    filteredAppeals.reduce((acc: any, curr) => {
+      const status = curr.status || "Новый";
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {})
+  ).map(([name, value]) => ({ name, value: value as number })), [filteredAppeals]);
+
+  // Data for Complaint Status Chart
+  const complaintStatusData = React.useMemo(() => Object.entries(
+    filteredAppeals.reduce((acc: any, curr) => {
+      const status = curr.complaint_status || "Не указано";
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {})
+  ).map(([name, value]) => ({ name, value: value as number })), [filteredAppeals]);
+
+  // Data for Status by Branch
+  const statusByBranchData = React.useMemo(() => {
+    const branches = Array.from(new Set(filteredAppeals.map(a => a.branch_name || "Не указан")));
+    return branches.map(branch => {
+      const branchAppeals = filteredAppeals.filter(a => a.branch_name === branch);
+      return {
+        name: branch,
+        Критические: branchAppeals.filter(a => a.complaint_status === "Критические").length,
+        Значимые: branchAppeals.filter(a => a.complaint_status === "Значимые").length,
+        Незначимые: branchAppeals.filter(a => a.complaint_status === "Незначимые").length,
+        total: branchAppeals.length
+      };
+    }).sort((a, b) => b.total - a.total).slice(0, 10);
+  }, [filteredAppeals]);
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin" /></div>;
   }
@@ -373,6 +420,56 @@ export default function Analytics() {
               />
             </div>
           )}
+
+          <div className="flex items-center gap-4 bg-white border border-zinc-200 rounded-2xl p-4 shadow-sm">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Статус</label>
+              <select 
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-black transition-all"
+              >
+                <option>Все</option>
+                <option>Новый</option>
+                <option>В работе</option>
+                <option>Выполнен</option>
+                <option>Отменен</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Филиал</label>
+              <select 
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-black transition-all"
+              >
+                <option>Все</option>
+                {BRANCH_NAMES.map(b => <option key={b}>{b}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Классификация</label>
+              <select 
+                value={classificationFilter}
+                onChange={(e) => setClassificationFilter(e.target.value)}
+                className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-black transition-all"
+              >
+                <option>Все</option>
+                {COMPLAINT_CLASSIFICATIONS.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Важность</label>
+              <select 
+                value={importanceFilter}
+                onChange={(e) => setImportanceFilter(e.target.value)}
+                className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-black transition-all"
+              >
+                <option>Все</option>
+                {COMPLAINT_STATUSES.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
 
           <div className="flex items-center gap-3">
             <div className="relative group">
@@ -628,6 +725,98 @@ export default function Analytics() {
                 />
                 <Legend verticalAlign="bottom" height={36} iconType="circle" />
               </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Complaint Status Pie Chart */}
+        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
+          <h3 className="text-lg font-bold mb-6">Важность жалоб (статистика)</h3>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={complaintStatusData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={5}
+                  dataKey="value"
+                  onClick={(data) => navigate(`/analytics/complaint_status?value=${data.name}`)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {complaintStatusData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={entry.name === "Критические" ? "#f43f5e" : entry.name === "Значимые" ? "#f59e0b" : "#3b82f6"} 
+                    />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Appeal Status Pie Chart */}
+        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
+          <h3 className="text-lg font-bold mb-6">Статус обращений (статистика)</h3>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={appealStatusData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={5}
+                  dataKey="value"
+                  onClick={(data) => navigate(`/analytics/status?value=${data.name}`)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {appealStatusData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={
+                        entry.name === "Выполнен" ? "#10b981" : 
+                        entry.name === "В работе" ? "#f59e0b" : 
+                        entry.name === "Новый" ? "#3b82f6" : 
+                        "#94a3b8"
+                      } 
+                    />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Status by Branch Stacked Bar Chart */}
+        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm col-span-full">
+          <h3 className="text-lg font-bold mb-6">Статус жалоб по филиалам (Топ-10)</h3>
+          <div className="h-[400px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={statusByBranchData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f4f4f5" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#71717a' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#71717a' }} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                />
+                <Legend verticalAlign="top" height={36} iconType="circle" />
+                <Bar dataKey="Критические" stackId="a" fill="#f43f5e" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Значимые" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Незначимые" stackId="a" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
