@@ -37,7 +37,7 @@
         "uid": { "type": "string", "description": "Firebase Auth UID" },
         "email": { "type": "string", "format": "email", "description": "Google Account Email" },
         "displayName": { "type": "string", "description": "User's full name" },
-        "role": { "type": "string", "enum": ["admin", "operator"], "description": "User's role in the system" },
+        "role": { "type": "string", "enum": ["admin", "operator", "manager"], "description": "User's role in the system" },
         "createdAt": { "type": "string", "format": "date-time" },
         "lastLogin": { "type": "string", "format": "date-time" }
       },
@@ -49,12 +49,31 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "phrase": { "type": "string" },
-        "description": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
         "author": { "type": "string" },
         "created_at": { "type": "string", "format": "date-time" }
       },
-      "required": ["phrase", "description"]
+      "required": ["title", "content", "category"]
+    },
+    "LearningBase": {
+      "title": "LearningBase",
+      "description": "Educational materials and instructions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "category": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "created_by": { "type": "string" }
+      },
+      "required": ["title", "description", "category", "author"]
     },
     "Settings": {
       "title": "Settings",
@@ -83,6 +102,20 @@
         "metadata": { "type": "object" },
         "timestamp": { "type": "string", "format": "date-time" }
       }
+    },
+    "ComplaintLog": {
+      "title": "ComplaintLog",
+      "description": "Log of manager actions on a specific appeal",
+      "type": "object",
+      "properties": {
+        "appeal_id": { "type": "string" },
+        "manager_id": { "type": "string" },
+        "manager_name": { "type": "string" },
+        "action": { "type": "string" },
+        "fields_filled": { "type": "array", "items": { "type": "string" } },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["appeal_id", "manager_id", "timestamp"]
     }
   },
   "firestore": {
@@ -98,6 +131,10 @@
       "schema": "Script",
       "description": "Collection of operator scripts"
     },
+    "/learning_base": {
+      "schema": "LearningBase",
+      "description": "Educational materials"
+    },
     "/settings": {
       "schema": "Settings",
       "description": "Global system settings"
@@ -105,6 +142,10 @@
     "/audit_logs": {
       "schema": "AuditLog",
       "description": "Audit trail"
+    },
+    "/complaint_logs": {
+      "schema": "ComplaintLog",
+      "description": "Logs for appeal processing actions"
     }
   }
 }

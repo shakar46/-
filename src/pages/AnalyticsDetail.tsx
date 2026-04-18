@@ -12,6 +12,33 @@ import { format, startOfDay, endOfDay } from "date-fns";
 import { ru } from "date-fns/locale";
 import { motion, AnimatePresence } from "motion/react";
 
+// Helper to determine motivation department (duplicated from Analytics.tsx for consistency)
+const getMotivationDepartment = (classification: string, section: string, source: string) => {
+  const cls = classification?.toLowerCase() || "";
+  const sec = section?.toLowerCase() || "";
+  const src = source?.toLowerCase() || "";
+
+  // Partners (highest priority)
+  if (src.includes("яндекс") || src.includes("узум") || src.includes("express") || src.includes("wolt")) return "Партнеры";
+
+  // Kitchen / Product
+  if (sec.includes("вкус") || sec.includes("запах") || sec.includes("внешний вид") || sec.includes("остывшая") || sec.includes("инородное")) return "Кухня / Продукт";
+
+  // Operations
+  if (sec.includes("недоложили") || sec.includes("перепутали") || sec.includes("срок")) return "Операции";
+
+  // Logistics
+  if (src.includes("доставка")) return "Логистика";
+
+  // Food Safety
+  if (sec.includes("отравление")) return "Пищевая безопасность";
+
+  // Service
+  if (sec.includes("менеджер") || sec.includes("официант") || sec.includes("хостес") || sec.includes("курьер") || cls.includes("колл")) return "Сервис";
+
+  return "Другое";
+};
+
 const COLORS = ['#000000', '#3f3f46', '#71717a', '#a1a1aa', '#d4d4d8', '#e4e4e7'];
 
 export default function AnalyticsDetail() {
@@ -19,6 +46,8 @@ export default function AnalyticsDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const value = searchParams.get("value");
+  const startDateParam = searchParams.get("start");
+  const endDateParam = searchParams.get("end");
   
   const [appeals, setAppeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,9 +60,19 @@ export default function AnalyticsDetail() {
         const querySnapshot = await getDocs(q);
         let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
         
+        // Filter based on dates if provided
+        if (startDateParam && endDateParam) {
+          const start = startOfDay(new Date(startDateParam));
+          const end = endOfDay(new Date(endDateParam));
+          data = data.filter(a => {
+            const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
+            return date >= start && date <= end;
+          });
+        }
+
         // Filter based on type and value
         if (type === "branch") {
-          data = data.filter(a => a.branch_name === value);
+          data = data.filter(a => (a.branch_name || "Не указан") === value);
         } else if (type === "date") {
           const targetDate = value; // format "dd.MM.yyyy"
           data = data.filter(a => {
@@ -41,11 +80,22 @@ export default function AnalyticsDetail() {
             return format(date, "dd.MM.yyyy") === targetDate;
           });
         } else if (type === "category") {
-          data = data.filter(a => a.complaint_classification === value);
+          data = data.filter(a => (a.confirmed_classification || a.complaint_classification || "Другое") === value);
         } else if (type === "motivation") {
-          data = data.filter(a => a.motivation_status === value);
+          data = data.filter(a => {
+            const confirmedCls = a.confirmed_classification || a.complaint_classification || "";
+            const confirmedSec = a.confirmed_section || a.classification_section || "";
+            const motivation = a.justification_status === "Обосновано" 
+              ? getMotivationDepartment(confirmedCls, confirmedSec, a.source || "")
+              : (a.motivation_status || "—");
+            return motivation === value;
+          });
         } else if (type === "justification") {
-          data = data.filter(a => a.justification_status === value);
+          data = data.filter(a => (a.justification_status || "Без статуса") === value);
+        } else if (type === "complaint_status") {
+          data = data.filter(a => (a.complaint_status || "Незначимые") === value);
+        } else if (type === "status") {
+          data = data.filter(a => (a.status || "Новый") === value);
         }
 
         setAppeals(data);
@@ -59,7 +109,7 @@ export default function AnalyticsDetail() {
 
   const categoryData = useMemo(() => Object.entries(
     appeals.reduce((acc: any, curr) => {
-      const cat = curr.complaint_classification || "Другое";
+      const cat = curr.confirmed_classification || curr.complaint_classification || "Другое";
       acc[cat] = (acc[cat] || 0) + 1;
       return acc;
     }, {})
@@ -89,6 +139,8 @@ export default function AnalyticsDetail() {
       case 'category': return `Категория: ${value}`;
       case 'motivation': return `Отдел: ${value}`;
       case 'justification': return `Обоснованность: ${value}`;
+      case 'complaint_status': return `Важность: ${value}`;
+      case 'status': return `Статус: ${value}`;
       default: return 'Детальная аналитика';
     }
   };
@@ -98,7 +150,7 @@ export default function AnalyticsDetail() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pt-10">
       <header className="flex items-center justify-between">
         <button 
           onClick={() => navigate("/analytics")}

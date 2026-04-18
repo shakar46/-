@@ -19,6 +19,7 @@ import {
   AlertCircle,
   History,
   Zap,
+  Wand2,
   SortAsc,
   SortDesc,
   ChevronRight,
@@ -347,6 +348,7 @@ export default function AppealDetail() {
           setInitialAppeal(data);
           fetchAuditLogs();
           fetchStandardAppeals();
+          fetchComplaintLogs();
         }
       } catch (error) {
         handleFirestoreError(error, OperationType.GET, `appeals/${id}`);
@@ -443,61 +445,65 @@ export default function AppealDetail() {
         metadata: { appealId, clientName: appeal.client_name, changes: changes.length > 0 ? changes : undefined }
       });
 
-          // Send Audit notification
-          const auditMessage = `🛡 <b>АУДИТ: ${isNew ? "Создание" : "Обновление"} обращения</b>\n\n` +
-            `👤 Кто: ${user?.displayName || "User"} (${user?.email})\n` +
-            `📝 Действие: ${isNew ? "Создано новое обращение" : "Обновлены данные обращения"}\n` +
-            `🆔 ID: #${appealId?.slice(0, 8)}\n` +
-            `👤 Клиент: ${appeal.client_name}` +
-            (changes.length > 0 ? `\n\n<b>Изменения:</b>\n${changes.join('\n')}` : "");
+      // Send Audit notification (only for new appeals as per user request to remove update messages)
+      if (isNew) {
+        const auditMessage = `🛡 <b>АУДИТ: Создание обращения</b>\n\n` +
+          `👤 Кто: ${user?.displayName || "User"} (${user?.email})\n` +
+          `📝 Действие: Создано новое обращение\n` +
+          `🆔 ID: #${appealId?.slice(0, 8)}\n` +
+          `👤 Клиент: ${appeal.client_name}`;
 
-          await sendTelegramMessage(auditMessage, 'audit');
+        await sendTelegramMessage(auditMessage, 'audit');
+      }
 
-          // Telegram notification logic
-          const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
-          if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
-            const { telegram_token, telegram_chat_id } = settingsSnap.data();
-            if (telegram_token && telegram_chat_id) {
-              let message = `📢 ${isNew ? "Новое обращение" : "Обновление обращения"} #${appealId?.slice(0, 8)}\n👤 Клиент: ${appeal.client_name}\n📍 Филиал: ${appeal.branch_name}\n📝 Статус: ${appeal.status}\n🔗 Подробнее: ${window.location.origin}/#/appeals/${appealId}`;
+      // Telegram notification logic
+      if (isNew) {
+        const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
+        if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
+          const { telegram_token, telegram_chat_id } = settingsSnap.data();
+          if (telegram_token && telegram_chat_id) {
+            let message = `📢 Новое обращение #${appealId?.slice(0, 8)}\n👤 Клиент: ${appeal.client_name}\n📍 Филиал: ${appeal.branch_name}\n📝 Статус: ${appeal.status}\n🔗 Подробнее: ${window.location.origin}/#/appeals/${appealId}`;
+            
+            // Overdue notification
+            if (appeal.deadline === "Просроченно выполнен" || appeal.deadline === "Вообще не выполнен") {
+              message = `⚠️ ВНИМАНИЕ: ПРОСРОЧЕНО!\n\n${message}\n⏳ Дедлайн: ${appeal.deadline}`;
+            }
+
+            // Send message with photo if exists
+            if (appeal.complaint_photos && appeal.complaint_photos.length > 0) {
+              const photo = appeal.complaint_photos[0];
+              const formData = new FormData();
+              formData.append("chat_id", telegram_chat_id);
+              formData.append("caption", message);
+              formData.append("parse_mode", "HTML");
               
-              // Overdue notification
-              if (appeal.deadline === "Просроченно выполнен" || appeal.deadline === "Вообще не выполнен") {
-                message = `⚠️ ВНИМАНИЕ: ПРОСРОЧЕНО!\n\n${message}\n⏳ Дедлайн: ${appeal.deadline}`;
-              }
-
-              // Send message with photo if exists
-              if (appeal.complaint_photos && appeal.complaint_photos.length > 0) {
-                const photo = appeal.complaint_photos[0];
-                // Telegram API for sending photo with caption
-                const formData = new FormData();
-                formData.append("chat_id", telegram_chat_id);
-                formData.append("caption", message);
-                formData.append("parse_mode", "HTML");
-                
-                // If it's a base64 string, we need to convert it to a blob
-                if (photo.startsWith("data:image")) {
-                  const blob = await (await fetch(photo)).blob();
-                  formData.append("photo", blob, "photo.jpg");
-                } else {
-                  formData.append("photo", photo);
-                }
-
-                fetch(`https://api.telegram.org/bot${telegram_token}/sendPhoto`, {
-                  method: "POST",
-                  body: formData
-                }).catch(console.error);
+              if (photo.startsWith("data:image")) {
+                const blob = await (await fetch(photo)).blob();
+                formData.append("photo", blob, "photo.jpg");
               } else {
-                fetch(`https://api.telegram.org/bot${telegram_token}/sendMessage`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ chat_id: telegram_chat_id, text: message, parse_mode: "HTML" })
-                }).catch(console.error);
+                formData.append("photo", photo);
               }
+
+              fetch(`https://api.telegram.org/bot${telegram_token}/sendPhoto`, {
+                method: "POST",
+                body: formData
+              }).catch(console.error);
+            } else {
+              fetch(`https://api.telegram.org/bot${telegram_token}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: telegram_chat_id, text: message, parse_mode: "HTML" })
+              }).catch(console.error);
             }
           }
+        }
+      }
 
       if (isNew) navigate(`/appeals/${appealId}`);
-      else fetchAuditLogs();
+      else {
+        fetchAuditLogs();
+        fetchComplaintLogs();
+      }
       
       setSaveStatus("success");
       setTimeout(() => setSaveStatus("idle"), 3000);
@@ -507,6 +513,83 @@ export default function AppealDetail() {
       handleFirestoreError(err, id === "new" ? OperationType.CREATE : OperationType.UPDATE, "appeals");
     }
     setSaving(false);
+  };
+
+  const [processing, setProcessing] = useState(false);
+
+  const handleProcess = async () => {
+    if (!appeal.instant_correction || !appeal.solution) {
+      alert("Пожалуйста, заполните 'Мгновенную коррекцию' и 'Решение' перед отправкой.");
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const processedAt = new Date().toISOString();
+      const updateData = {
+        ...appeal,
+        status: "Выполнен",
+        processed_by: user?.uid || "system",
+        processed_by_name: user?.displayName || "shakar46",
+        processed_at: processedAt,
+        updated_at: processedAt
+      };
+
+      await updateDoc(doc(db, "appeals", id!), updateData);
+
+      // Create complaint log
+      await addDoc(collection(db, "complaint_logs"), {
+        appeal_id: id,
+        manager_id: user?.uid || "system",
+        manager_name: user?.displayName || "shakar46",
+        action: "Обработка жалобы",
+        fields_filled: ["instant_correction", "solution", "status"],
+        timestamp: processedAt
+      });
+
+      // Telegram notification
+      const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
+      if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
+        const { telegram_token, telegram_chat_id } = settingsSnap.data();
+        if (telegram_token && telegram_chat_id) {
+          const message = `✅ <b>Жалоба обработана</b>\n\n` +
+            `👤 <b>Менеджер:</b> ${user?.displayName || "User"}\n` +
+            `📍 <b>Филиал:</b> ${appeal.branch_name}\n` +
+            `👤 <b>Клиент:</b> ${appeal.client_name}\n` +
+            `📅 <b>Дата заказа:</b> ${appeal.order_date ? format(new Date(appeal.order_date), "dd.MM.yyyy") : "—"}\n` +
+            `🔗 <a href="${window.location.origin}/#/appeals/${id}">Просмотреть детали</a>`;
+
+          await sendTelegramMessage(message, 'main');
+        }
+      }
+
+      setAppeal(updateData as Appeal);
+      fetchAuditLogs();
+      fetchComplaintLogs();
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `appeals/${id}`);
+      setSaveStatus("error");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const [complaintLogs, setComplaintLogs] = useState<any[]>([]);
+
+  const fetchComplaintLogs = async () => {
+    try {
+      const q = query(
+        collection(db, "complaint_logs"), 
+        where("appeal_id", "==", id),
+        orderBy("timestamp", "desc")
+      );
+      const querySnapshot = await getDocs(q);
+      setComplaintLogs(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    } catch (error) {
+      console.error("Error fetching complaint logs:", error);
+    }
   };
 
   const handleDelete = async () => {
@@ -543,8 +626,47 @@ export default function AppealDetail() {
   const parseMulti = (val: string | undefined) => val ? val.split(", ") : [];
   const stringifyMulti = (arr: string[]) => arr.join(", ");
 
+  const getSuggestedMotivation = (classification: string, section: string, source: string): string[] => {
+    const cls = (classification || "").toLowerCase();
+    const sec = (section || "").toLowerCase();
+    const src = (source || "").toLowerCase();
+
+    if (src.includes("яндекс")) return ["Яндекс"];
+    if (src.includes("узум")) return ["Узум тезкор"];
+    if (src.includes("wolt")) return ["Wolt"];
+    if (src.includes("express")) return ["ДОСТАВКА"];
+
+    if (sec.includes("вкус") || sec.includes("запах") || sec.includes("внешний вид")) return ["КУХНЯ"];
+    if (sec.includes("остывшая еда") || sec.includes("отдача")) return ["КУХНЯ", "ДОСТАВКА"];
+    if (sec.includes("инородное тело")) return ["ПРОИЗВОДСТВЕННЫЙ ЦЕХ"];
+    
+    if (sec.includes("недоложили")) return ["УПАКОВКА", "КУХНЯ"];
+    if (sec.includes("перепутаница") || sec.includes("перепутали")) return ["УПАКОВКА", "РАЗДАЧНИК"];
+    
+    if (sec.includes("срок")) return ["ДОСТАВКА", "АДМИН, КУРЬЕР"];
+    if (sec.includes("отравление")) return ["ПРОИЗВОДСТВЕННЫЙ ЦЕХ", "СКЛАД", "КУХНЯ"];
+    
+    if (sec.includes("менеджер")) return ["МЕНЕДЖЕР"];
+    if (sec.includes("официант")) return ["ЗАЛ"];
+    if (sec.includes("хостес")) return ["ХОСТЕС"];
+    if (sec.includes("курьер")) return ["АДМИН, КУРЬЕР"];
+    
+    if (cls.includes("колл") || sec.includes("колл")) return ["КОЛЛ ЦЕНТР"];
+
+    return [];
+  };
+
+  const autoFillMotivation = () => {
+    const confirmedCls = appeal.confirmed_classification || appeal.complaint_classification || "";
+    const confirmedSec = appeal.confirmed_section || appeal.classification_section || "";
+    const suggested = getSuggestedMotivation(confirmedCls, confirmedSec, appeal.source || "");
+    if (suggested.length > 0) {
+      setAppeal({ ...appeal, motivation_status: stringifyMulti(suggested) });
+    }
+  };
+
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-20">
+    <div className="max-w-5xl mx-auto space-y-8 pb-20 pt-10">
       <header className="flex items-center justify-between">
         <button 
           onClick={() => navigate("/appeals")}
@@ -553,14 +675,6 @@ export default function AppealDetail() {
           <ChevronLeft size={20} /> Назад к списку
         </button>
         <div className="flex items-center gap-3">
-          {id !== "new" && (
-            <button 
-              onClick={exportStandardReport}
-              className="flex items-center gap-2 px-6 py-3 bg-zinc-100 text-black rounded-xl font-bold hover:bg-zinc-200 transition-all shadow-sm"
-            >
-              <Download size={20} /> ➡️ «Стандартный отчёт»
-            </button>
-          )}
           {id !== "new" && userRole === 'admin' && (
             <button 
               onClick={() => setIsDeleteModalOpen(true)}
@@ -582,9 +696,72 @@ export default function AppealDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Main Info */}
         <div className="lg:col-span-2 space-y-8">
-          <section className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <FileText size={20} className="text-zinc-400" /> Основная информация
+          {/* Manager Action Section - Highlighted */}
+          {id !== "new" && (
+            <section className="bg-white p-8 rounded-2xl border border-zinc-200 shadow-sm space-y-6">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-900 mb-1">
+                  Обработка обращения
+                </h2>
+                <p className="text-zinc-500 text-xs font-medium">
+                  Заполните информацию о решении и мгновенном исправлении
+                </p>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
+                    Мгновенное исправление (Обратная связь)
+                  </label>
+                  <textarea 
+                    rows={3}
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-primary/10 outline-none transition-all resize-none shadow-sm"
+                    value={appeal.instant_correction || ""}
+                    onChange={(e) => setAppeal({...appeal, instant_correction: e.target.value})}
+                    placeholder="Что сказали клиенту?"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
+                    Решение ситуации
+                  </label>
+                  <textarea 
+                    rows={3}
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-primary/10 outline-none transition-all resize-none shadow-sm"
+                    value={appeal.solution || ""}
+                    onChange={(e) => setAppeal({...appeal, solution: e.target.value})}
+                    placeholder="Итоговое решение..."
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleProcess}
+                    disabled={processing || appeal.status === 'Выполнен'}
+                    className={cn(
+                      "flex items-center gap-2 px-8 py-3 rounded-xl font-bold text-sm transition-all",
+                      appeal.status === 'Выполнен' 
+                        ? "bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200" 
+                        : "bg-primary text-white hover:bg-primary/90 shadow-md shadow-primary/10"
+                    )}
+                  >
+                    {processing ? (
+                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : appeal.status === 'Выполнен' ? (
+                      <><Check size={18} /> Обработано</>
+                    ) : (
+                      "Завершить обработку"
+                    )}
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          <section className="bg-white p-8 rounded-[2.5rem] border border-zinc-100 shadow-sm space-y-8">
+            <h2 className="text-xl font-black flex items-center gap-3">
+              <FileText size={22} className="text-zinc-400" /> Основная информация
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -625,7 +802,7 @@ export default function AppealDetail() {
               <div>
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Дата заказа</label>
                 <input 
-                  type="date" 
+                  type="datetime-local" 
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
                   value={appeal.order_date || ""}
                   onChange={(e) => setAppeal({...appeal, order_date: e.target.value})}
@@ -843,13 +1020,22 @@ export default function AppealDetail() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Autocomplete 
-                label="Статус для отдела мотивации"
-                value={appeal.motivation_status || ""}
-                options={MOTIVATION_STATUSES}
-                onChange={(val: string) => setAppeal({...appeal, motivation_status: val})}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+              <div className="relative">
+                <MultiSelect 
+                  label="Статус для отдела мотивации"
+                  values={parseMulti(appeal.motivation_status)}
+                  options={MOTIVATION_STATUSES}
+                  onChange={(vals: string[]) => setAppeal({...appeal, motivation_status: stringifyMulti(vals)})}
+                />
+                <button 
+                  onClick={autoFillMotivation}
+                  title="Рассчитать отдел мотивации автоматически"
+                  className="absolute right-0 -top-2 p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-full transition-all"
+                >
+                  <Wand2 size={16} />
+                </button>
+              </div>
               <div>
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Статус обоснованности</label>
                 <div className="flex gap-2">
@@ -882,12 +1068,12 @@ export default function AppealDetail() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Autocomplete 
+                <MultiSelect 
                   label="Категория (Тип)"
-                  value={appeal.confirmed_classification || ""}
+                  values={parseMulti(appeal.confirmed_classification)}
                   options={COMPLAINT_CLASSIFICATIONS}
-                  onChange={(val: string) => setAppeal({...appeal, confirmed_classification: val})}
-                  placeholder="Выберите тип..."
+                  onChange={(vals: string[]) => setAppeal({...appeal, confirmed_classification: stringifyMulti(vals)})}
+                  placeholder="Выберите типы..."
                 />
                 <MultiSelect 
                   label="Секции (Разделы)"
@@ -917,6 +1103,34 @@ export default function AppealDetail() {
               />
             </div>
           </section>
+
+          {id !== "new" && complaintLogs.length > 0 && (
+            <section className="bg-white p-8 rounded-[2.5rem] border border-zinc-100 shadow-sm space-y-6">
+              <h2 className="text-xl font-black flex items-center gap-3">
+                <History size={22} className="text-zinc-400" /> Лог обработки
+              </h2>
+              <div className="space-y-4">
+                {complaintLogs.map((log: any) => (
+                  <div key={log.id} className="flex gap-4 p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <User size={20} className="text-primary" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-sm">{log.manager_name}</span>
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                          {format(new Date(log.timestamp), "d MMM, HH:mm", { locale: ru })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-zinc-600">
+                        {log.action}. Изменены поля: <span className="font-medium text-black">{log.fields_filled.join(", ")}</span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
         {/* Right Column: Metadata */}
@@ -954,13 +1168,6 @@ export default function AppealDetail() {
                       {imp}
                     </button>
                   ))}
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-4 bg-zinc-50 rounded-2xl">
-                <Clock size={20} className="text-zinc-400" />
-                <div>
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Создано</p>
-                  <p className="text-sm font-bold">{appeal.created_at ? format(new Date(appeal.created_at), "d MMM yyyy, HH:mm", { locale: ru }) : "Сейчас"}</p>
                 </div>
               </div>
             </div>
@@ -1003,6 +1210,24 @@ export default function AppealDetail() {
             </div>
           </section>
 
+          <section className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-3 relative">
+              <Clock size={20} className="text-zinc-400" />
+              <div className="flex-1">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Создано</p>
+                {userRole === 'admin' ? (
+                  <input 
+                    type="datetime-local"
+                    className="w-full bg-transparent border-none p-0 text-sm font-bold focus:ring-0 outline-none"
+                    value={appeal.created_at ? format(new Date(appeal.created_at), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm")}
+                    onChange={(e) => setAppeal({...appeal, created_at: e.target.value})}
+                  />
+                ) : (
+                  <p className="text-sm font-bold">{appeal.created_at ? format(new Date(appeal.created_at), "d MMM yyyy, HH:mm", { locale: ru }) : "Сейчас"}</p>
+                )}
+              </div>
+            </div>
+          </section>
 
         </div>
       </div>

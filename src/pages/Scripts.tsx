@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { collection, query, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
-import { Search, Plus, FileText, Trash2, Edit, Save, X, ChevronRight, Repeat } from "lucide-react";
+import { Search, Plus, FileText, Trash2, Edit, Save, X, ChevronRight, Repeat, Check, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -14,7 +14,9 @@ export default function Scripts() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [editingScript, setEditingScript] = useState<any>(null);
   const [scriptToDelete, setScriptToDelete] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ title: "", content: "", category: "Скрипты гостей" });
+  const [formData, setFormData] = useState({ title: "", content: "", category: "Скрипты гостей", author: "" });
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   useEffect(() => {
     fetchScripts();
@@ -33,20 +35,28 @@ export default function Scripts() {
 
   const handleSave = async () => {
     if (!formData.title || !formData.content) return;
+    setSaving(true);
+    setSaveStatus("idle");
     
     try {
       if (editingScript) {
         await updateDoc(doc(db, "scripts", editingScript.id), formData);
       } else {
-        await addDoc(collection(db, "scripts"), formData);
+        await addDoc(collection(db, "scripts"), { ...formData, created_at: new Date().toISOString() });
       }
       
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
       setIsModalOpen(false);
       setEditingScript(null);
-      setFormData({ title: "", content: "", category: "Скрипты гостей" });
+      setFormData({ title: "", content: "", category: "Скрипты гостей", author: "" });
       fetchScripts();
     } catch (error) {
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
       handleFirestoreError(error, editingScript ? OperationType.UPDATE : OperationType.CREATE, "scripts");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -85,7 +95,7 @@ export default function Scripts() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pt-10">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight mb-2">Скрипты</h1>
@@ -94,7 +104,7 @@ export default function Scripts() {
         <button
           onClick={() => {
             setEditingScript(null);
-            setFormData({ title: "", content: "", category: "Скрипты гостей" });
+            setFormData({ title: "", content: "", category: "Скрипты гостей", author: "" });
             setIsModalOpen(true);
           }}
           className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10"
@@ -116,25 +126,6 @@ export default function Scripts() {
       </div>
 
       <div className="space-y-12">
-        <section className="bg-zinc-900 p-8 rounded-[2.5rem] text-white overflow-hidden relative group">
-          <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:scale-110 transition-transform">
-            <Repeat size={120} />
-          </div>
-          <div className="relative z-10 space-y-6">
-            <h2 className="text-3xl font-bold tracking-tight">Повторные корректирующие действия</h2>
-            <p className="text-zinc-400 max-w-xl">
-              База данных типовых решений для часто возникающих проблем. Используйте проверенные методы для быстрого устранения жалоб.
-            </p>
-            <Link 
-              to="/scripts/repeated-actions"
-              className="inline-flex items-center gap-2 bg-white text-black px-6 py-3 rounded-xl font-bold hover:scale-105 transition-all"
-            >
-              Открыть базу действий
-              <ChevronRight size={18} />
-            </Link>
-          </div>
-        </section>
-
         {CATEGORIES.map(category => {
           const categoryScripts = filteredScripts.filter(s => s.category === category);
           if (categoryScripts.length === 0 && !searchQuery) return null;
@@ -169,7 +160,7 @@ export default function Scripts() {
                           <button 
                             onClick={() => {
                               setEditingScript(script);
-                              setFormData({ title: script.title, content: script.content, category: script.category });
+                              setFormData({ title: script.title, content: script.content, category: script.category, author: script.author || "" });
                               setIsModalOpen(true);
                             }}
                             className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-50 rounded-lg transition-all"
@@ -188,13 +179,18 @@ export default function Scripts() {
                         </div>
                       </div>
                       <h3 className="text-lg font-bold mb-2 line-clamp-1">{script.title}</h3>
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="px-2 py-0.5 bg-zinc-100 text-[10px] font-bold text-zinc-400 rounded uppercase tracking-wider">
+                          Автор: {script.author || "—"}
+                        </span>
+                      </div>
                       <p className="text-sm text-zinc-500 line-clamp-3 leading-relaxed mb-4">
                         {script.content}
                       </p>
                       <button 
                         onClick={() => {
                           setEditingScript(script);
-                          setFormData({ title: script.title, content: script.content, category: script.category });
+                          setFormData({ title: script.title, content: script.content, category: script.category, author: script.author || "" });
                           setIsModalOpen(true);
                         }}
                         className="w-full flex items-center justify-between text-xs font-bold text-zinc-400 group-hover:text-black transition-colors pt-4 border-t border-zinc-50"
@@ -256,6 +252,16 @@ export default function Scripts() {
                 </div>
               </div>
               <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Автор</label>
+                <input
+                  type="text"
+                  value={formData.author}
+                  onChange={(e) => setFormData({ ...formData, author: e.target.value })}
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                  placeholder="Введите имя автора..."
+                />
+              </div>
+              <div className="space-y-2">
                 <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Текст скрипта</label>
                 <textarea
                   value={formData.content}
@@ -275,10 +281,17 @@ export default function Scripts() {
               </button>
               <button
                 onClick={handleSave}
+                disabled={saving}
                 className="flex-1 bg-black text-white py-4 rounded-xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10 flex items-center justify-center gap-2"
               >
-                <Save size={20} />
-                Сохранить
+                {saving ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Save size={20} />
+                    Сохранить
+                  </>
+                )}
               </button>
             </div>
           </motion.div>
@@ -318,6 +331,22 @@ export default function Scripts() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {saveStatus !== "idle" && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[150] px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3 font-bold ${
+              saveStatus === "success" ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"
+            }`}
+          >
+            {saveStatus === "success" ? <Check size={20} /> : <AlertCircle size={20} />}
+            {saveStatus === "success" ? "Скрипт сохранен" : "Ошибка сохранения"}
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

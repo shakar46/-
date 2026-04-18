@@ -2,37 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
+    // 0. Default Deny
     // ===============================================================
-    //
-    // Collection: users
-    // Fields:
-    //   - uid: string (optional, linked on login)
-    //   - email: string (required)
-    //   - displayName: string (required)
-    //   - role: string (admin, operator)
-    //   - createdAt: timestamp/string
-    //
-    // Collection: appeals
-    // Fields:
-    //   - client_name: string
-    //   - client_phone: string
-    //   - complaint_text: string
-    //   - status: string
-    //   ...
-    //
-    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
 
     // ===============================================================
     // Helper Functions
     // ===============================================================
     
-    function isAuthenticated() {
+    function isSignedIn() {
       return request.auth != null;
     }
 
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
     function isSuperAdmin() {
-      return isAuthenticated() && request.auth.token.email == "shakar0406@gmail.com";
+      return isEmailVerified() && request.auth.token.email == "shakar0406@gmail.com";
     }
 
     function getUserData() {
@@ -40,85 +29,118 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSuperAdmin() || (isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "admin");
-    }
-
-    function isOperator() {
-      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "operator";
+      return isSuperAdmin() || (isEmailVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "admin");
     }
 
     function isStaff() {
-      return isAdmin() || isOperator();
+      return isAdmin() || (isEmailVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role in ["operator", "manager"]);
     }
 
-    function isValidUser(data) {
-      return data.email is string && 
-             data.role in ["admin", "operator"] &&
-             data.displayName is string;
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     // ===============================================================
-    // Rules
+    // Entity Validations
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.email is string && data.email.size() <= 200 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.role in ["admin", "operator", "manager"];
+    }
+
+    function isValidAppeal(data) {
+      return data.client_name is string && data.client_name.size() <= 100 &&
+             data.client_phone is string && data.client_phone.size() <= 20 &&
+             data.complaint_text is string && data.complaint_text.size() <= 5000;
+    }
+
+    function isValidScript(data) {
+      return data.title is string && data.title.size() <= 200 &&
+             data.content is string && data.content.size() <= 5000 &&
+             data.category is string && data.category.size() <= 100;
+    }
+
+    function isValidLearningItem(data) {
+      return data.title is string && data.title.size() <= 200 &&
+             data.description is string && data.description.size() <= 5000 &&
+             data.category is string && data.category.size() <= 100 &&
+             data.author is string && data.author.size() <= 100;
+    }
+
+    function isValidComplaintLog(data) {
+      return data.appeal_id is string && data.appeal_id.size() <= 128 &&
+             data.manager_id is string && data.manager_id.size() <= 128 &&
+             data.timestamp is string;
+    }
+
+    // ===============================================================
+    // Collection Rules
     // ===============================================================
 
     // Users Collection
     match /users/{userId} {
-      // Allow users to read their own document (by UID or by email match)
-      allow read: if isStaff() || (isAuthenticated() && (request.auth.uid == userId || resource.data.email == request.auth.token.email));
+      allow get: if isStaff() || (isSignedIn() && request.auth.uid == userId);
+      allow list: if isAdmin();
       
-      // Allow super admin to create anything
-      // Allow admins to create operators
-      // Allow authenticated users to create their own document IF they match a pre-added email
-      allow create: if (isAdmin() && isValidUser(request.resource.data) && (isSuperAdmin() || request.resource.data.role == "operator")) ||
-                    (isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data) && 
-                     exists(/databases/$(database)/documents/users/$(request.auth.uid)) == false &&
-                     request.resource.data.email == request.auth.token.email);
+      allow create: if (isAdmin() && isValidUser(incoming())) ||
+                    (isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) && 
+                     !exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                     incoming().email == request.auth.token.email &&
+                     incoming().role == "operator");
       
-      // Allow users to update their own document (e.g. lastLogin)
-      allow update: if (isAdmin() && isValidUser(request.resource.data) && (resource.data.email != "shakar0406@gmail.com") && (isSuperAdmin() || request.resource.data.role == "operator")) ||
-                    (isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data) && 
-                     request.resource.data.email == resource.data.email &&
-                     request.resource.data.role == resource.data.role);
+      allow update: if (isAdmin() && isValidUser(incoming()) && existing().email != "shakar0406@gmail.com") ||
+                    (isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) && 
+                     incoming().email == existing().email &&
+                     incoming().role == existing().role);
       
-      // Allow super admin to delete anything
-      // Allow admins to delete non-super-admins
-      // Allow a user to delete a pre-added document if it matches their email (used during UID linking)
-      allow delete: if (isAdmin() && resource.data.email != "shakar0406@gmail.com") ||
-                    (isAuthenticated() && resource.data.email == request.auth.token.email && resource.data.uid == null);
+      allow delete: if isAdmin() && existing().email != "shakar0406@gmail.com";
     }
 
     // Appeals Collection
     match /appeals/{appealId} {
-      allow read: if isStaff();
-      allow create: if isStaff();
-      allow update: if isStaff();
+      allow get: if isStaff() && isValidId(appealId);
+      allow list: if isStaff();
+      allow create: if (isStaff() || !isSignedIn()) && isValidAppeal(incoming());
+      allow update: if isStaff() && isValidAppeal(incoming());
       allow delete: if isAdmin();
-    }
-
-    // Standard Appeals Collection
-    match /standard_appeals/{appealId} {
-      allow read: if isStaff();
-      allow create: if isStaff();
-      allow update: if isStaff();
-      allow delete: if isAdmin();
-    }
-
-    // Audit Logs (Appeal specific)
-    match /audit_logs/{logId} {
-      allow read: if isStaff();
-      allow create: if isStaff();
-    }
-
-    // Global Audit History (Login/Logout/Actions)
-    match /audit_history/{logId} {
-      allow read: if isAdmin();
-      allow create: if isAuthenticated();
     }
 
     // Scripts
     match /scripts/{scriptId} {
-      allow read: if isStaff();
-      allow write: if isAdmin();
+      allow get: if isStaff() && isValidId(scriptId);
+      allow list: if isStaff();
+      allow create: if isAdmin() && isValidScript(incoming());
+      allow update: if isAdmin() && isValidScript(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Learning Base
+    match /learning_base/{itemId} {
+      allow get: if isStaff() && isValidId(itemId);
+      allow list: if isStaff();
+      allow create: if isStaff() && isValidLearningItem(incoming()) && 
+                    incoming().created_by == request.auth.uid;
+      allow update: if ((isAdmin() && incoming().created_by == existing().created_by) || (isStaff() && existing().created_by == request.auth.uid)) && 
+                    isValidLearningItem(incoming()) &&
+                    incoming().created_by == existing().created_by;
+      allow delete: if isAdmin() || (isStaff() && existing().created_by == request.auth.uid);
+    }
+
+    // Audit Logs
+    match /audit_logs/{logId} {
+      allow list: if isStaff();
+      allow get: if isStaff() && isValidId(logId);
+      allow create: if true; // Allowed for public form logging
     }
 
     // Settings
@@ -126,14 +148,19 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if isAdmin();
     }
+    
+    // Standard Appeals (Internal reference)
+    match /standard_appeals/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
 
-    // Public Form Access (if needed)
-    // The prompt says "Доступ к платформе ограничен", but there is a PublicForm.
-    // Usually public forms write to a specific collection or have specific rules.
-    // If PublicForm writes to 'appeals', we might need to allow unauthenticated create.
-    // However, the prompt says "Любой пользователь, не добавленный в систему администратором, не может войти в платформу."
-    // This usually refers to the CRM interface.
-    // Let's check if PublicForm is used by external clients.
-    // In App.tsx, /form is excluded from the login check.
+    // Complaint Logs
+    match /complaint_logs/{logId} {
+      allow list: if isStaff();
+      allow get: if isStaff() && isValidId(logId);
+      allow create: if isStaff() && isValidComplaintLog(incoming());
+      allow update, delete: if isAdmin();
+    }
   }
 }

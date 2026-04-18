@@ -18,7 +18,8 @@ import {
   ChevronDown,
   Trash2,
   ArrowUpDown,
-  X
+  X,
+  Zap
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { format } from "date-fns";
@@ -28,6 +29,8 @@ import { BRANCH_NAMES } from "../constants";
 import { Appeal } from "../types";
 import { useFirebase } from "../components/FirebaseProvider";
 import * as XLSX from "xlsx";
+
+import { cn } from "../lib/utils";
 
 export default function Appeals() {
   const { userRole } = useFirebase();
@@ -221,57 +224,60 @@ export default function Appeals() {
     // Set column widths
     const wscols = [
       {wch: 15}, {wch: 20}, {wch: 25}, {wch: 15}, {wch: 20}, 
-      {wch: 25}, {wch: 25}, {wch: 15}, {wch: 50}, {wch: 50},
-      {wch: 20}, {wch: 20}, {wch: 20}, {wch: 15}
+      {wch: 25}, {wch: 25}, {wch: 15}, {wch: 40}, {wch: 30}, 
+      {wch: 20}, {wch: 15}, {wch: 20}, {wch: 15}
     ];
     ws['!cols'] = wscols;
 
-    XLSX.writeFile(wb, `Appeals_Export_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    XLSX.writeFile(wb, `Appeals_Export_${format(new Date(), "dd_MM_yyyy")}.xlsx`);
   };
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white p-8 rounded-2xl shadow-sm border border-zinc-200">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight mb-2">Обращения</h1>
-          <p className="text-zinc-500">Управление жалобами и запросами клиентов в реальном времени.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Обращения</h1>
+          <p className="text-zinc-500 mt-1 font-medium">Контроль качества и работа с инцидентами</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button 
             onClick={handleExport}
-            className="flex items-center justify-center gap-2 bg-white border border-zinc-200 px-5 py-3 rounded-xl font-bold hover:bg-zinc-50 transition-all"
+            className="flex items-center gap-2 bg-white border border-zinc-200 text-zinc-600 px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-zinc-50 transition-all shadow-sm"
           >
             <Download size={18} />
             Экспорт
           </button>
           <Link
-            to="/appeals/new"
-            className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10"
+            to="/quick-appeal"
+            className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary/90 transition-all shadow-md shadow-primary/10"
           >
-            <Plus size={20} />
-            Новое обращение
+            <Plus size={18} />
+            Создать инцидент
           </Link>
         </div>
       </header>
 
-      <div className="bg-white p-4 rounded-3xl border border-zinc-200 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
+      <section className="bg-white p-6 rounded-2xl border border-zinc-100 shadow-sm space-y-6">
+        <div className="flex flex-col xl:flex-row gap-4">
+          <div className="relative flex-1 group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-primary transition-colors" size={20} />
             <input
               type="text"
-              placeholder="Поиск по имени, телефону или ID..."
+              placeholder="Поиск по клиенту, телефону или ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl pl-12 pr-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
+              className="w-full bg-zinc-50 border border-zinc-100 rounded-xl pl-12 pr-4 py-3 text-sm font-medium focus:ring-4 focus:ring-primary/5 outline-none transition-all placeholder:text-zinc-400"
             />
           </div>
           <button 
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm transition-all ${showFilters ? 'bg-black text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'}`}
+            className={cn(
+              "flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all",
+              showFilters ? 'bg-primary text-white shadow-md' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+            )}
           >
             <Filter size={18} />
-            Фильтры
+            {showFilters ? 'Скрыть фильтры' : 'Развернутые фильтры'}
           </button>
         </div>
 
@@ -283,13 +289,13 @@ export default function Appeals() {
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden"
             >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-zinc-50">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Статус</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 pt-8 border-t border-zinc-50">
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Статус</label>
                   <select 
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-2 text-sm outline-none focus:border-black transition-all"
+                    className="w-full bg-zinc-50 border-white rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all shadow-sm text-[#1F2937]"
                   >
                     <option>Все</option>
                     <option>Новый</option>
@@ -298,23 +304,23 @@ export default function Appeals() {
                     <option>Отменен</option>
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Филиал</label>
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Филиал</label>
                   <select 
                     value={branchFilter}
                     onChange={(e) => setBranchFilter(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-2 text-sm outline-none focus:border-black transition-all"
+                    className="w-full bg-zinc-50 border-white rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all shadow-sm text-[#1F2937]"
                   >
                     <option>Все</option>
                     {BRANCH_NAMES.map(b => <option key={b}>{b}</option>)}
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Важность</label>
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Степень важности</label>
                   <select 
                     value={importanceFilter}
                     onChange={(e) => setImportanceFilter(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-2 text-sm outline-none focus:border-black transition-all"
+                    className="w-full bg-zinc-50 border-white rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all shadow-sm text-[#1F2937]"
                   >
                     <option>Все</option>
                     <option>Критические</option>
@@ -322,7 +328,7 @@ export default function Appeals() {
                     <option>Незначимые</option>
                   </select>
                 </div>
-                <div className="flex items-end">
+                <div className="flex items-end pb-3">
                   <button 
                     onClick={() => {
                       setStatusFilter("Все");
@@ -330,90 +336,80 @@ export default function Appeals() {
                       setImportanceFilter("Все");
                       setSearchQuery("");
                     }}
-                    className="text-xs font-bold text-zinc-400 hover:text-black transition-colors"
+                    className="text-[10px] font-black text-zinc-400 hover:text-primary uppercase tracking-[0.2em] transition-colors"
                   >
-                    Сбросить все фильтры
+                    Сбросить всё
                   </button>
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </section>
 
-      <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col h-[700px]">
-        <div className="overflow-auto flex-1 custom-scrollbar">
+      <div className="bg-white rounded-2xl border border-zinc-100 shadow-xl overflow-hidden flex flex-col h-[750px] relative">
+        <div className="overflow-auto flex-1 custom-scrollbar scroll-smooth">
           <table className="w-full text-left border-separate border-spacing-0">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-zinc-50 border-b border-zinc-100">
+            <thead className="sticky top-0 z-50">
+              <tr className="bg-white transition-all">
                 <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-primary transition-colors border-b border-zinc-50"
                   onClick={() => handleSort("created_at")}
                 >
                   <div className="flex items-center gap-2">
                     ID / Дата
-                    <ArrowUpDown size={12} className={sortField === "created_at" ? "text-black" : "text-zinc-300"} />
+                    <ArrowUpDown size={14} className={sortField === "created_at" ? "text-primary" : "text-zinc-200"} />
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-primary transition-colors border-b border-zinc-50"
                   onClick={() => handleSort("client_name")}
                 >
                   <div className="flex items-center gap-2">
                     Клиент
-                    <ArrowUpDown size={12} className={sortField === "client_name" ? "text-black" : "text-zinc-300"} />
+                    <ArrowUpDown size={14} className={sortField === "client_name" ? "text-primary" : "text-zinc-200"} />
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-primary transition-colors border-b border-zinc-50"
                   onClick={() => handleSort("complaint_classification")}
                 >
                   <div className="flex items-center gap-2">
                     Классификация
-                    <ArrowUpDown size={12} className={sortField === "complaint_classification" ? "text-black" : "text-zinc-300"} />
+                    <ArrowUpDown size={14} className={sortField === "complaint_classification" ? "text-primary" : "text-zinc-200"} />
                   </div>
                 </th>
                 <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
+                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-primary transition-colors border-b border-zinc-50"
                   onClick={() => handleSort("status")}
                 >
                   <div className="flex items-center gap-2">
                     Статус
-                    <ArrowUpDown size={12} className={sortField === "status" ? "text-black" : "text-zinc-300"} />
+                    <ArrowUpDown size={14} className={sortField === "status" ? "text-primary" : "text-zinc-200"} />
                   </div>
                 </th>
-                <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
-                  onClick={() => handleSort("complaint_status")}
-                >
-                  <div className="flex items-center gap-2">
-                    Важность
-                    <ArrowUpDown size={12} className={sortField === "complaint_status" ? "text-black" : "text-zinc-300"} />
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest cursor-pointer hover:text-black transition-colors bg-zinc-50"
-                  onClick={() => handleSort("branch_name")}
-                >
-                  <div className="flex items-center gap-2">
-                    Филиал
-                    <ArrowUpDown size={12} className={sortField === "branch_name" ? "text-black" : "text-zinc-300"} />
-                  </div>
-                </th>
-                <th className="px-6 py-4 bg-zinc-50"></th>
+                <th className="px-6 py-4 border-b border-zinc-50"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
-                    <div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin mx-auto" />
+                  <td colSpan={5} className="px-10 py-32 text-center">
+                    <div className="relative w-20 h-20 mx-auto">
+                      <div className="absolute inset-0 border-4 border-primary/10 rounded-full" />
+                      <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                    <p className="mt-6 text-zinc-400 text-xs font-black uppercase tracking-widest italic animate-pulse">Синхронизация данных...</p>
                   </td>
                 </tr>
               ) : filteredAppeals.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center text-zinc-400 font-medium">
-                    Ничего не найдено
+                  <td colSpan={5} className="px-10 py-32 text-center">
+                    <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-zinc-200">
+                      <Search size={40} />
+                    </div>
+                    <h3 className="text-xl font-black text-zinc-400 tracking-tight">Ничего не найдено</h3>
+                    <p className="text-zinc-300 text-sm mt-2">Попробуйте изменить параметры поиска или фильтры.</p>
                   </td>
                 </tr>
               ) : (
@@ -421,102 +417,84 @@ export default function Appeals() {
                   <React.Fragment key={appeal.id}>
                     <tr 
                       className={cn(
-                        "hover:bg-zinc-100/50 transition-colors group cursor-pointer relative",
-                        idx % 2 === 0 ? "bg-white" : "bg-zinc-50/30",
-                        expandedRowId === appeal.id && "bg-zinc-100/80",
-                        isNearingDeadline(appeal) && "bg-amber-50/30",
-                        isOverdue(appeal) && "bg-red-50/30"
+                        "hover:bg-primary/5 transition-all group cursor-pointer relative",
+                        expandedRowId === appeal.id ? "bg-primary/5 shadow-inner" : "",
+                        isNearingDeadline(appeal) && "bg-warning/5",
+                        isOverdue(appeal) && "bg-error/5"
                       )}
                       onClick={() => setExpandedRowId(expandedRowId === appeal.id ? null : appeal.id)}
                     >
-                      <td className="px-6 py-5">
+                      <td className="px-10 py-8">
                         <div className="flex flex-col">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-bold text-zinc-400">#{appeal.id?.slice(0, 8) || "—"}</span>
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-[10px] font-black text-zinc-400 tracking-[0.2em]">#{appeal.id?.slice(0, 8) || "—"}</span>
                             {isNearingDeadline(appeal) && (
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-bold animate-pulse">
+                              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning/10 text-warning text-[9px] font-black animate-pulse uppercase tracking-wider">
                                 <Clock className="w-2.5 h-2.5" />
-                                <span>24ч</span>
+                                <span>Срочно</span>
                               </div>
                             )}
                             {isOverdue(appeal) && (
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[9px] font-bold">
+                              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-error/10 text-error text-[9px] font-black uppercase tracking-wider">
                                 <AlertCircle className="w-2.5 h-2.5" />
                                 <span>Просрочено</span>
                               </div>
                             )}
                           </div>
-                          <span className="text-sm font-medium flex items-center gap-1.5">
-                            <Clock size={14} className="text-zinc-300" />
+                          <span className="text-sm font-black flex items-center gap-2 group-hover:text-primary transition-colors">
+                            <Clock size={16} className="text-zinc-300 group-hover:text-primary/50" />
                             {formatDate(appeal.created_at)}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400">
-                            <User size={16} />
+                      <td className="px-8 py-8">
+                        <div className="flex items-center gap-5">
+                          <div className="w-14 h-14 rounded-2xl bg-zinc-50 flex items-center justify-center text-zinc-300 group-hover:bg-white group-hover:text-primary group-hover:shadow-md transition-all">
+                            <User size={24} />
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-sm font-bold">{appeal.client_name}</span>
-                            <span className="text-xs text-zinc-400">{appeal.client_phone}</span>
+                            <span className="text-lg font-black tracking-tight text-[#1F2937] group-hover:text-primary transition-colors">{appeal.client_name}</span>
+                            <span className="text-[11px] text-zinc-400 font-black tracking-widest">{appeal.client_phone}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-5">
-                        <div className="flex flex-col max-w-[200px]">
-                          <span className="text-sm font-medium truncate">{appeal.complaint_classification}</span>
-                          <span className="text-[10px] text-zinc-400 uppercase font-bold truncate">{appeal.classification_section}</span>
+                      <td className="px-8 py-8">
+                        <div className="flex flex-col max-w-[240px]">
+                          <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">{appeal.branch_name}</span>
+                          <span className="text-sm font-black text-[#1F2937] truncate">{appeal.complaint_classification}</span>
+                          <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest truncate">{appeal.classification_section}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-5">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold border ${getStatusColor(appeal.status)}`}>
-                          {appeal.status === "Новый" && <AlertCircle size={12} />}
-                          {appeal.status === "Выполнен" && <CheckCircle2 size={12} />}
+                      <td className="px-8 py-8">
+                        <div className={cn(
+                          "inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm",
+                          getStatusColor(appeal.status)
+                        )}>
+                          {appeal.status === "Новый" && <AlertCircle size={14} />}
+                          {appeal.status === "Выполнен" && <CheckCircle2 size={14} />}
                           {appeal.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5">
-                        {appeal.complaint_status ? (
-                          <span className={cn(
-                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold",
-                            appeal.complaint_status === 'Критические' ? "bg-rose-100 text-rose-600" :
-                            appeal.complaint_status === 'Значимые' ? "bg-orange-100 text-orange-600" :
-                            "bg-blue-100 text-blue-600"
-                          )}>
-                            {appeal.complaint_status}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-1.5 text-sm text-zinc-500 font-medium">
-                          <MapPin size={14} className="text-zinc-300" />
-                          {appeal.branch_name}
                         </div>
                       </td>
-                      <td className="px-6 py-5 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="px-10 py-8 text-right">
+                        <div className="flex items-center justify-end gap-4">
                           {userRole === 'admin' && (
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setDeleteConfirmId(appeal.id);
                               }}
-                              className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                              title="Удалить"
+                              className="p-3 text-zinc-300 hover:text-error hover:bg-error/10 rounded-2xl transition-all active:scale-90"
+                              title="Удалить инцидент"
                             >
-                              <Trash2 size={16} />
+                              <Trash2 size={20} />
                             </button>
                           )}
                           <Link 
                             to={`/appeals/${appeal.id}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-xl transition-all inline-flex items-center gap-1 text-xs font-bold"
+                            className="p-4 bg-zinc-50 text-zinc-400 hover:bg-primary hover:text-white rounded-[1.25rem] transition-all group/btn shadow-inner active:scale-90"
                           >
-                            Открыть
-                            <ChevronRight size={16} />
+                            <ChevronRight size={24} className="group-hover/btn:rotate-90 transition-transform" />
                           </Link>
                         </div>
                       </td>
@@ -524,63 +502,100 @@ export default function Appeals() {
                     <AnimatePresence>
                       {expandedRowId === appeal.id && (
                         <tr>
-                          <td colSpan={7} className="px-0 py-0 border-none">
+                          <td colSpan={5} className="px-0 py-0 border-none bg-zinc-50/50">
                             <motion.div
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: "auto", opacity: 1 }}
                               exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden bg-zinc-50/30"
+                              className="overflow-hidden"
                             >
-                              <div className="px-20 py-8 grid grid-cols-1 md:grid-cols-2 gap-12 border-l-4 border-black ml-6 my-4">
-                                <div className="space-y-6">
-                                  <div>
-                                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Текст жалобы</h4>
-                                    <p className="text-sm text-zinc-700 leading-relaxed bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm">
-                                      {appeal.complaint_text || "Текст отсутствует"}
+                              <div className="px-16 py-12 grid grid-cols-1 lg:grid-cols-2 gap-16 border-l-[6px] border-primary m-10 bg-white rounded-[3rem] shadow-xl">
+                                <div className="space-y-10">
+                                  <div className="relative">
+                                    <div className="absolute -left-4 top-0 w-1 h-full bg-primary/20 rounded-full" />
+                                    <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-4">Суть инцидента</h4>
+                                    <p className="text-lg font-bold text-[#1F2937] leading-relaxed italic">
+                                      "{appeal.complaint_text || "Описание отсутствует"}"
                                     </p>
                                   </div>
-                                  <div>
-                                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Прилагательный комментарий</h4>
-                                    <p className="text-sm text-zinc-700 leading-relaxed bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm">
-                                      {appeal.adjective_comment || "Комментарий отсутствует"}
-                                    </p>
+                                  <div className="grid grid-cols-2 gap-10">
+                                    <div className="p-6 bg-zinc-50 rounded-[2rem] border border-zinc-100">
+                                      <h4 className="text-[9px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-2">Мгновенная коррекция</h4>
+                                      <p className="text-sm font-black text-success leading-relaxed">
+                                        {appeal.instant_correction || "Не заполнено"}
+                                      </p>
+                                    </div>
+                                    <div className="p-6 bg-zinc-50 rounded-[2rem] border border-zinc-100">
+                                      <h4 className="text-[9px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-2">Источник жалобы</h4>
+                                      <p className="text-sm font-black text-primary leading-relaxed">
+                                        {appeal.source || "Не указан"}
+                                      </p>
+                                    </div>
                                   </div>
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Источник</h4>
-                                      <p className="text-sm font-medium">{appeal.source || "Не указан"}</p>
+                                  <div className="pt-6 border-t border-zinc-50 flex items-center justify-between">
+                                    <div className="flex items-center gap-6">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400">
+                                          <User size={18} />
+                                        </div>
+                                        <div>
+                                          <h5 className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Ответственный</h5>
+                                          <p className="text-sm font-black text-[#1F2937]">{appeal.responsible_person || "Не назначен"}</p>
+                                        </div>
+                                      </div>
+                                      {appeal.processed_by_name && (
+                                        <div className="flex items-center gap-3 border-l pl-6 border-zinc-100">
+                                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                                            <Zap size={18} fill="currentColor" />
+                                          </div>
+                                          <div>
+                                            <h5 className="text-[9px] font-black text-primary uppercase tracking-widest">Обработал менеджер</h5>
+                                            <p className="text-sm font-black text-[#1F2937]">{appeal.processed_by_name}</p>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                    <div>
-                                      <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Дата заказа</h4>
-                                      <p className="text-sm font-medium">{appeal.order_date || "Не указана"}</p>
-                                    </div>
+                                    <Link to={`/appeals/${appeal.id}`} className="px-8 py-3 bg-primary text-white rounded-full font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20">
+                                      Редактировать полностью
+                                    </Link>
                                   </div>
                                 </div>
-                                <div className="space-y-6">
-                                  <div>
-                                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Классификация</h4>
-                                    <div className="bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm space-y-3">
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-xs text-zinc-400">Тип:</span>
-                                        <span className="text-sm font-bold">{appeal.complaint_classification}</span>
+                                
+                                <div className="space-y-8">
+                                  <div className="bg-[#1F2937] p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -mr-12 -mt-12" />
+                                    <h4 className="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] mb-6">Классификация инцидента</h4>
+                                    <div className="space-y-6">
+                                      <div className="flex justify-between items-center pb-4 border-b border-white/5">
+                                        <span className="text-zinc-500 text-xs font-black">Кластер:</span>
+                                        <span className="text-white text-sm font-black">{appeal.complaint_classification}</span>
+                                      </div>
+                                      <div className="flex justify-between items-center pb-4 border-b border-white/5">
+                                        <span className="text-zinc-500 text-xs font-black">Раздел:</span>
+                                        <span className="text-white text-sm font-black">{appeal.classification_section}</span>
                                       </div>
                                       <div className="flex justify-between items-center">
-                                        <span className="text-xs text-zinc-400">Секция:</span>
-                                        <span className="text-sm font-bold">{appeal.classification_section}</span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-xs text-zinc-400">Продукт/Сотрудник:</span>
-                                        <span className="text-sm font-bold">{appeal.product_employee || "—"}</span>
+                                        <span className="text-zinc-500 text-xs font-black">Продукт/Фокус:</span>
+                                        <span className="text-white text-sm font-black truncate max-w-[150px]">{appeal.product_employee || "Не указан"}</span>
                                       </div>
                                     </div>
                                   </div>
-                                  <div>
-                                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Ответственный</h4>
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400">
-                                        <User size={12} />
-                                      </div>
-                                      <span className="text-sm font-medium">{appeal.responsible_person || "Не назначен"}</span>
+                                  
+                                  <div className="p-8 bg-zinc-50 rounded-[2.5rem] border border-zinc-100">
+                                    <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-4 text-center">Важность</h4>
+                                    <div className="flex justify-center">
+                                      {appeal.complaint_status ? (
+                                        <span className={cn(
+                                          "px-8 py-3 rounded-full text-[11px] font-black uppercase tracking-[0.3em] shadow-sm",
+                                          appeal.complaint_status === 'Критические' ? "bg-error text-white shadow-error/20" :
+                                          appeal.complaint_status === 'Значимые' ? "bg-warning text-white shadow-warning/20" :
+                                          "bg-primary text-white shadow-primary/20"
+                                        )}>
+                                          {appeal.complaint_status}
+                                        </span>
+                                      ) : (
+                                        <span className="text-zinc-300 font-black italic">Статус не определен</span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -596,105 +611,91 @@ export default function Appeals() {
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-4 bg-zinc-50 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4 order-2 sm:order-1">
-            <p className="text-xs text-zinc-400 font-medium">
-              Показано {filteredAppeals.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(filteredAppeals.length, currentPage * itemsPerPage)} из {filteredAppeals.length}
+        
+        {/* Modern Pagination Footer */}
+        <footer className="px-10 py-6 bg-white border-t border-zinc-50 flex flex-col xl:flex-row items-center justify-between gap-6 z-[60]">
+          <div className="flex items-center gap-6 order-2 xl:order-1">
+            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] bg-zinc-50 px-5 py-3 rounded-2xl shadow-inner italic">
+              Платформа ALPHA <span className="text-zinc-200 mx-2">|</span> 
+              Записи <span className="text-primary">{filteredAppeals.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}—{Math.min(filteredAppeals.length, currentPage * itemsPerPage)}</span> 
+              из <span className="text-primary">{filteredAppeals.length}</span>
             </p>
-            <div className="flex items-center gap-2 bg-white border border-zinc-200 rounded-lg px-2 py-1">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase">Стр.</span>
-              <input 
-                type="number"
-                min={1}
-                max={totalPages}
-                value={currentPage}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value);
-                  if (val >= 1 && val <= totalPages) setCurrentPage(val);
-                }}
-                className="w-10 text-xs font-bold text-center outline-none"
-              />
-              <span className="text-[10px] font-bold text-zinc-400 uppercase">из {totalPages}</span>
-            </div>
           </div>
-          <div className="flex items-center gap-2 order-1 sm:order-2">
+          
+          <div className="flex items-center gap-4 order-1 xl:order-2">
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              className={`p-2 rounded-xl transition-all ${currentPage === 1 ? 'text-zinc-300 cursor-not-allowed' : 'text-zinc-600 hover:bg-zinc-100 hover:text-black'}`}
+              className={cn(
+                "p-4 rounded-2xl transition-all shadow-sm active:scale-90",
+                currentPage === 1 ? 'bg-zinc-50 text-zinc-200 cursor-not-allowed' : 'bg-zinc-100 text-[#1F2937] hover:bg-white hover:shadow-xl hover:text-primary ring-1 ring-black/5'
+              )}
             >
-              <ChevronRight size={18} className="rotate-180" />
+              <ChevronRight size={24} className="rotate-180" />
             </button>
             
-            <div className="flex items-center gap-1">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
-                if (
-                  totalPages <= 5 ||
-                  pageNum === 1 ||
-                  pageNum === totalPages ||
-                  (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
-                ) {
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                        currentPage === pageNum 
-                          ? 'bg-black text-white' 
-                          : 'text-zinc-500 hover:bg-zinc-100 hover:text-black'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                } else if (
-                  (pageNum === 2 && currentPage > 3) ||
-                  (pageNum === totalPages - 1 && currentPage < totalPages - 2)
-                ) {
-                  return <span key={pageNum} className="text-zinc-300 px-1">...</span>;
-                }
-                return null;
-              })}
+            <div className="flex items-center gap-2">
+              {getPaginationRange(currentPage, totalPages).map((pageNum, idx) => (
+                pageNum === '...' ? (
+                  <span key={`dots-${idx}`} className="text-zinc-300 px-2 font-black italic tracking-widest">...</span>
+                ) : (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum as number)}
+                    className={cn(
+                      "w-12 h-12 rounded-[1.25rem] text-xs font-black transition-all shadow-sm active:scale-90",
+                      currentPage === pageNum 
+                        ? 'bg-primary text-white shadow-xl shadow-primary/30 scale-110' 
+                        : 'bg-white text-zinc-400 hover:text-primary hover:bg-zinc-50'
+                    )}
+                  >
+                    {pageNum}
+                  </button>
+                )
+              ))}
             </div>
 
             <button 
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
-              className={`p-2 rounded-xl transition-all ${currentPage === totalPages || totalPages === 0 ? 'text-zinc-300 cursor-not-allowed' : 'text-zinc-600 hover:bg-zinc-100 hover:text-black'}`}
+              className={cn(
+                "p-4 rounded-2xl transition-all shadow-sm active:scale-90",
+                currentPage === totalPages || totalPages === 0 ? 'bg-zinc-50 text-zinc-200 cursor-not-allowed' : 'bg-zinc-100 text-[#1F2937] hover:bg-white hover:shadow-xl hover:text-primary ring-1 ring-black/5'
+              )}
             >
-              <ChevronRight size={18} />
+              <ChevronRight size={24} />
             </button>
           </div>
-        </div>
+        </footer>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Modern High-End Delete Confirm */}
       <AnimatePresence>
         {deleteConfirmId && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-8 bg-[#1F2937]/30 backdrop-blur-2xl">
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center"
+              initial={{ scale: 0.8, opacity: 0, y: 50 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0, y: 50 }}
+              className="bg-white rounded-[3.5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.25)] max-w-md w-full p-12 text-center border border-white"
             >
-              <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                <Trash2 size={32} />
+              <div className="w-24 h-24 bg-error/10 text-error rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 shadow-inner">
+                <Trash2 size={40} />
               </div>
-              <h3 className="text-2xl font-bold mb-2 tracking-tight">Удалить обращение?</h3>
-              <p className="text-zinc-500 mb-8">Это действие необратимо. Все данные этого обращения будут удалены навсегда.</p>
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setDeleteConfirmId(null)}
-                  className="flex-1 px-6 py-3 rounded-xl font-bold border border-zinc-200 hover:bg-zinc-50 transition-all"
-                >
-                  Отмена
-                </button>
+              <h3 className="text-3xl font-black mb-4 tracking-tight text-[#1F2937]">Удалить запись?</h3>
+              <p className="text-zinc-500 mb-12 text-lg leading-relaxed">Данные об инциденте <span className="text-[#1F2937] font-black">#{deleteConfirmId.slice(0, 8)}</span> будут стерты навсегда.</p>
+              <div className="flex flex-col gap-4">
                 <button 
                   onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
-                  className="flex-1 px-6 py-3 rounded-xl font-bold bg-rose-500 text-white hover:bg-rose-600 transition-all shadow-lg shadow-rose-500/20"
+                  className="w-full py-6 rounded-[2rem] font-black bg-error text-white hover:scale-[1.02] active:scale-95 transition-all shadow-2xl shadow-error/20 text-lg"
                 >
-                  Удалить
+                  Подтвердить удаление
+                </button>
+                <button 
+                  onClick={() => setDeleteConfirmId(null)}
+                  className="w-full py-6 rounded-[2rem] font-black bg-zinc-100 text-[#1F2937] hover:bg-zinc-200 transition-all text-sm uppercase tracking-widest"
+                >
+                  Отмена
                 </button>
               </div>
             </motion.div>
@@ -705,6 +706,16 @@ export default function Appeals() {
   );
 }
 
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
+function getPaginationRange(current: number, total: number) {
+  if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1);
+  const range = [];
+  if (current <= 3) {
+    range.push(1, 2, 3, 4, '...', total);
+  } else if (current >= total - 2) {
+    range.push(1, '...', total - 3, total - 2, total - 1, total);
+  } else {
+    range.push(1, '...', current - 1, current, current + 1, '...', total);
+  }
+  return range;
 }
+

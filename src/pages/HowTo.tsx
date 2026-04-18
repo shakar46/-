@@ -96,7 +96,7 @@ export default function HowTo() {
             </li>
             <li className="flex items-start gap-3">
               <CheckCircle2 size={18} className="text-emerald-500 mt-1 flex-shrink-0" />
-              <span><b>Экспорт:</b> Вы можете скачать 'Недельный отчёт (Кухня)' или отправить его напрямую в Telegram.</span>
+              <span><b>Экспорт:</b> Вы можете скачать 'Свод отчёт' или отправить его напрямую в Telegram.</span>
             </li>
           </ul>
         </InstructionSection>

@@ -43,7 +43,7 @@ interface UserData {
   uid?: string;
   email: string;
   displayName: string;
-  role: 'admin' | 'operator';
+  role: 'admin' | 'operator' | 'manager';
   createdAt?: any;
   lastLogin?: string;
 }
@@ -56,9 +56,10 @@ const UserManagement = () => {
   const [roleFilter, setRoleFilter] = useState<string>("All");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
-  const [newRole, setNewRole] = useState<'admin' | 'operator'>('operator');
+  const [newRole, setNewRole] = useState<'admin' | 'operator' | 'manager'>('operator');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   useEffect(() => {
     if (userRole !== 'admin') return;
@@ -95,8 +96,8 @@ const UserManagement = () => {
       }
 
       // Add user to Firestore
-      // We use a random ID because we don't have the UID yet
-      const docRef = await addDoc(collection(db, "users"), {
+      const docId = newEmail.trim().toLowerCase();
+      await setDoc(doc(db, "users", docId), {
         email: newEmail.trim().toLowerCase(),
         role: newRole,
         displayName: "Новый сотрудник",
@@ -107,7 +108,7 @@ const UserManagement = () => {
       await sendTelegramMessage(
         `👤 <b>Добавлен новый сотрудник</b>\n\n` +
         `📧 Email: ${newEmail.trim().toLowerCase()}\n` +
-        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : 'Оператор'}`
+        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : newRole === 'manager' ? 'Менеджер' : 'Оператор'}`
       );
 
       // Send Audit notification
@@ -115,7 +116,7 @@ const UserManagement = () => {
         `🛡 <b>АУДИТ: Добавление пользователя</b>\n\n` +
         `👤 Кто добавил: ${currentUser?.displayName || 'Admin'} (${currentUser?.email})\n` +
         `📧 Кого добавили: ${newEmail.trim().toLowerCase()}\n` +
-        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : 'Оператор'}`,
+        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : newRole === 'manager' ? 'Менеджер' : 'Оператор'}`,
         'audit'
       );
 
@@ -126,14 +127,18 @@ const UserManagement = () => {
         userName: currentUser?.displayName || "User",
         type: 'action',
         action: `Добавлен новый пользователь: ${newEmail.trim().toLowerCase()} (${newRole})`,
-        metadata: { targetEmail: newEmail.trim().toLowerCase(), role: newRole, docId: docRef.id }
+        metadata: { targetEmail: newEmail.trim().toLowerCase(), role: newRole, docId }
       });
 
       setIsAddModalOpen(false);
       setNewEmail("");
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     } catch (err) {
       console.error("Error adding user:", err);
       setError("Ошибка при добавлении пользователя");
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     } finally {
       setIsSubmitting(false);
     }
@@ -173,18 +178,21 @@ const UserManagement = () => {
     }
   };
 
-  const handleUpdateRole = async (userId: string, userEmail: string, currentRole: string) => {
+  const handleUpdateRole = async (userId: string, userEmail: string, currentRole: 'admin' | 'operator' | 'manager') => {
     if (userEmail === "shakar0406@gmail.com") {
       alert("Нельзя изменить роль главного администратора");
       return;
     }
 
-    const newRole = currentRole === 'admin' ? 'operator' : 'admin';
-    if (!confirm(`Изменить роль пользователя ${userEmail} на ${newRole === 'admin' ? 'Админ' : 'Оператор'}?`)) return;
+    const roles: ('admin' | 'operator' | 'manager')[] = ['operator', 'manager', 'admin'];
+    const currentIndex = roles.indexOf(currentRole);
+    const nextRole = roles[(currentIndex + 1) % roles.length];
+    
+    if (!confirm(`Изменить роль пользователя ${userEmail} на ${nextRole === 'admin' ? 'Админ' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}?`)) return;
 
     try {
       await updateDoc(doc(db, "users", userId), {
-        role: newRole,
+        role: nextRole,
         updatedAt: serverTimestamp()
       });
 
@@ -193,7 +201,7 @@ const UserManagement = () => {
         `🛡 <b>АУДИТ: Изменение роли</b>\n\n` +
         `👤 Кто изменил: ${currentUser?.displayName || 'Admin'} (${currentUser?.email})\n` +
         `📧 Пользователь: ${userEmail}\n` +
-        `🛡 Новая роль: ${newRole === 'admin' ? 'Администратор' : 'Оператор'}`,
+        `🛡 Новая роль: ${nextRole === 'admin' ? 'Администратор' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}`,
         'audit'
       );
 
@@ -203,12 +211,16 @@ const UserManagement = () => {
         userEmail: currentUser?.email || "",
         userName: currentUser?.displayName || "User",
         type: 'action',
-        action: `Изменена роль пользователя ${userEmail} на ${newRole}`,
-        metadata: { targetUserId: userId, targetEmail: userEmail, newRole }
+        action: `Изменена роль пользователя ${userEmail} на ${nextRole}`,
+        metadata: { targetUserId: userId, targetEmail: userEmail, newRole: nextRole }
       });
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     } catch (err) {
       console.error("Error updating role:", err);
       alert("Ошибка при изменении роли");
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     }
   };
 
@@ -277,6 +289,7 @@ const UserManagement = () => {
             >
               <option value="All">Все роли</option>
               <option value="admin">Админы</option>
+              <option value="manager">Менеджеры</option>
               <option value="operator">Операторы</option>
             </select>
           </div>
@@ -329,12 +342,14 @@ const UserManagement = () => {
                         disabled={u.email === "shakar0406@gmail.com"}
                         className={cn(
                           "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all",
-                          u.role === 'admin' ? "bg-black text-white" : "bg-zinc-100 text-zinc-600",
+                          u.role === 'admin' ? "bg-black text-white" : 
+                          u.role === 'manager' ? "bg-zinc-800 text-white" :
+                          "bg-zinc-100 text-zinc-600",
                           u.email !== "shakar0406@gmail.com" && "hover:scale-105"
                         )}
                       >
-                        {u.role === 'admin' ? <Shield size={12} /> : <Users size={12} />}
-                        {u.role === 'admin' ? 'Админ' : 'Оператор'}
+                        {u.role === 'admin' ? <Shield size={12} /> : u.role === 'manager' ? <Check size={12} /> : <Users size={12} />}
+                        {u.role === 'admin' ? 'Админ' : u.role === 'manager' ? 'Менеджер' : 'Оператор'}
                       </button>
                     </td>
                     <td className="px-8 py-5">
@@ -420,28 +435,39 @@ const UserManagement = () => {
 
                 <div>
                   <label className="block text-sm font-bold text-zinc-700 mb-2 px-1">Роль</label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <button
                       type="button"
                       onClick={() => setNewRole('operator')}
                       className={cn(
-                        "flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all gap-2",
+                        "flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-2",
                         newRole === 'operator' ? "border-black bg-zinc-50" : "border-zinc-100 bg-white hover:border-zinc-200"
                       )}
                     >
-                      <Users size={24} className={newRole === 'operator' ? "text-black" : "text-zinc-400"} />
-                      <p className="font-bold text-xs">Оператор</p>
+                      <Users size={20} className={newRole === 'operator' ? "text-black" : "text-zinc-400"} />
+                      <p className="font-bold text-[10px]">Оператор</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewRole('manager')}
+                      className={cn(
+                        "flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-2",
+                        newRole === 'manager' ? "border-black bg-zinc-50" : "border-zinc-100 bg-white hover:border-zinc-200"
+                      )}
+                    >
+                      <Check size={20} className={newRole === 'manager' ? "text-black" : "text-zinc-400"} />
+                      <p className="font-bold text-[10px]">Менеджер</p>
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewRole('admin')}
                       className={cn(
-                        "flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all gap-2",
+                        "flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-2",
                         newRole === 'admin' ? "border-black bg-zinc-50" : "border-zinc-100 bg-white hover:border-zinc-200"
                       )}
                     >
-                      <Shield size={24} className={newRole === 'admin' ? "text-black" : "text-zinc-400"} />
-                      <p className="font-bold text-xs">Админ</p>
+                      <Shield size={20} className={newRole === 'admin' ? "text-black" : "text-zinc-400"} />
+                      <p className="font-bold text-[10px]">Админ</p>
                     </button>
                   </div>
                 </div>
@@ -472,6 +498,22 @@ const UserManagement = () => {
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {saveStatus !== "idle" && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[150] px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3 font-bold ${
+              saveStatus === "success" ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"
+            }`}
+          >
+            {saveStatus === "success" ? <Check size={20} /> : <AlertCircle size={20} />}
+            {saveStatus === "success" ? "Данные обновлены" : "Ошибка"}
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

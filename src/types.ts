@@ -53,6 +53,9 @@ export interface Appeal {
   confirmed_section?: string;
   solution?: string;
   instant_correction?: string;
+  processed_by?: string;
+  processed_by_name?: string;
+  processed_at?: string;
   justification_status?: 'Обосновано' | 'Необосновано';
   complaint_status?: 'Критические' | 'Значимые' | 'Незначимые';
 }

@@ -17,6 +17,7 @@ import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { motion } from "motion/react";
+import { cn } from "../lib/utils";
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -83,88 +84,133 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-10">
-      <header>
-        <h1 className="text-4xl font-bold tracking-tight mb-2">Обзор системы</h1>
-        <p className="text-zinc-500 text-lg font-medium">Добро пожаловать в CRM. Вот что происходит сегодня.</p>
+    <div className="space-y-12">
+      <header className="bg-white p-10 rounded-[3rem] shadow-sm border border-zinc-100 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -mr-48 -mt-48 group-hover:bg-primary/10 transition-all duration-1000" />
+        <div className="relative z-10">
+          <motion.h1 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="text-5xl font-black tracking-tighter mb-4 text-[#1F2937]"
+          >
+            Обзор системы
+          </motion.h1>
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="text-zinc-400 text-lg font-medium leading-relaxed max-w-xl"
+          >
+            Добро пожаловать в пульс вашей компании. Все ключевые показатели и новые обращения в одном месте.
+          </motion.p>
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Всего обращений" value={stats.total} icon={MessageSquare} />
-        <StatCard title="Новые" value={stats.new} icon={AlertCircle} color="text-blue-500" />
-        <StatCard title="В работе" value={stats.inWork} icon={Clock} color="text-amber-500" />
-        <StatCard title="Выполнено" value={stats.completed} icon={CheckCircle2} color="text-emerald-500" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <StatCard title="Всего сегодня" value={stats.total} icon={MessageSquare} />
+        <StatCard title="Новые" value={stats.new} icon={AlertCircle} color="text-primary" />
+        <StatCard title="В работе" value={stats.inWork} icon={Clock} color="text-warning" />
+        <StatCard title="Завершено" value={stats.completed} icon={CheckCircle2} color="text-success" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold tracking-tight">Последние обращения</h3>
-            <Link to="/appeals" className="text-sm font-bold text-zinc-400 hover:text-black flex items-center gap-1 transition-colors">
-              Все обращения <ChevronRight size={16} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        <div className="lg:col-span-2 space-y-8">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-3xl font-black tracking-tight text-[#1F2937]">Последние обращения</h3>
+            <Link to="/appeals" className="flex items-center gap-2 text-primary font-black text-sm uppercase tracking-widest hover:translate-x-1 transition-transform">
+              Смотреть все <ArrowUpRight size={18} />
             </Link>
           </div>
           
-          <div className="bg-white rounded-[2rem] border border-zinc-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-[3rem] border border-zinc-100 shadow-sm overflow-hidden">
             <div className="divide-y divide-zinc-50">
-              {stats.recentAppeals.map((appeal) => (
-                <Link 
-                  key={appeal.id} 
-                  to={`/appeals/${appeal.id}`}
-                  className="flex items-center justify-between p-6 hover:bg-zinc-50 transition-all group"
+              {stats.recentAppeals.map((appeal, index) => (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  key={appeal.id}
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-400 group-hover:bg-black group-hover:text-white transition-all">
-                      <MessageSquare size={24} />
+                  <Link 
+                    to={`/appeals/${appeal.id}`}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-8 hover:bg-zinc-50 transition-all group relative"
+                  >
+                    <div className="flex items-center gap-6">
+                      <div className="w-16 h-16 rounded-[1.5rem] bg-zinc-50 flex items-center justify-center text-zinc-300 group-hover:bg-primary group-hover:text-white group-hover:rotate-6 transition-all shadow-sm">
+                        <MessageSquare size={28} />
+                      </div>
+                      <div>
+                        <h4 className="font-black text-xl text-[#1F2937] leading-tight mb-1">{appeal.client_name}</h4>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{appeal.complaint_classification || "Без категории"}</span>
+                          <span className="w-1 h-1 rounded-full bg-zinc-200" />
+                          <span className="text-[10px] font-black text-primary uppercase tracking-widest">{appeal.branch_name}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-bold text-zinc-900">{appeal.client_name}</h4>
-                      <p className="text-xs text-zinc-400 font-medium">{appeal.complaint_classification || "Без категории"}</p>
+                    
+                    <div className="flex items-center gap-8 mt-6 sm:mt-0">
+                      <div className="text-right hidden sm:block">
+                        <p className="text-sm font-black text-[#1F2937]">{format(new Date(appeal.created_at), "HH:mm")}</p>
+                        <p className="text-[10px] text-zinc-400 font-black uppercase tracking-[0.2em]">{format(new Date(appeal.created_at), "d MMM", { locale: ru })}</p>
+                      </div>
+                      
+                      <div className={cn(
+                        "px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm",
+                        appeal.status === "Новый" ? "bg-primary/5 text-primary border-primary/10" : 
+                        appeal.status === "Выполнен" ? "bg-success/5 text-success border-success/10" : 
+                        "bg-zinc-100 text-zinc-500 border-zinc-200"
+                      )}>
+                        {appeal.status}
+                      </div>
+                      
+                      <div className="w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center text-zinc-300 group-hover:text-primary transition-colors">
+                        <ChevronRight size={24} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="hidden md:block text-right">
-                      <p className="text-xs font-bold text-zinc-900">{format(new Date(appeal.created_at), "HH:mm")}</p>
-                      <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">{format(new Date(appeal.created_at), "d MMM", { locale: ru })}</p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
-                      appeal.status === "Новый" ? "bg-blue-50 text-blue-600 border-blue-100" : 
-                      appeal.status === "Выполнен" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
-                      "bg-zinc-100 text-zinc-500 border-zinc-200"
-                    }`}>
-                      {appeal.status}
-                    </span>
-                    <ChevronRight size={20} className="text-zinc-200 group-hover:text-black transition-colors" />
-                  </div>
-                </Link>
+                  </Link>
+                </motion.div>
               ))}
+              {stats.recentAppeals.length === 0 && (
+                <div className="p-16 text-center">
+                  <p className="text-zinc-400 font-black text-sm uppercase tracking-[0.3em] mb-4">Жалоб пока нет</p>
+                  <Link to="/quick-appeal" className="inline-block bg-primary text-white px-8 py-4 rounded-[1.5rem] font-black tracking-widest shadow-xl shadow-primary/20">Добавить первую</Link>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="space-y-6">
-          <h3 className="text-2xl font-bold tracking-tight">Активность</h3>
+        <div className="space-y-8">
+          <h3 className="text-3xl font-black tracking-tight text-[#1F2937] px-2">Активность</h3>
           
-          <div className="bg-white p-8 rounded-[2rem] border border-zinc-200 shadow-sm">
-            <h4 className="font-bold mb-6">Топ филиалов за сегодня</h4>
-            <div className="space-y-6">
+          <div className="bg-[#1F2937] p-10 rounded-[3.5rem] shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
+            <h4 className="text-white font-black text-xl mb-10 tracking-tight">Топ филиалов</h4>
+            <div className="space-y-8">
               {stats.topBranches.length > 0 ? stats.topBranches.map((item, i) => (
-                <div key={i} className="space-y-2">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span>{item.name}</span>
-                    <span>{item.count}</span>
+                <div key={i} className="space-y-3">
+                  <div className="flex justify-between items-end">
+                    <span className="text-zinc-400 text-[10px] font-black uppercase tracking-[0.2em]">{item.name}</span>
+                    <span className="text-white font-black text-lg">{item.count}</span>
                   </div>
-                  <div className="w-full h-1 bg-zinc-50 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${item.color}`} 
-                      style={{ width: `${(item.count / stats.topBranches[0].count) * 100}%` }} 
+                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(item.count / stats.topBranches[0].count) * 100}%` }}
+                      transition={{ duration: 1, ease: "easeOut", delay: i * 0.1 }}
+                      className="h-full bg-primary shadow-[0_0_15px_rgba(47,128,237,0.5)]" 
                     />
                   </div>
                 </div>
               )) : (
-                <p className="text-xs text-zinc-400 text-center py-4">Нет данных за сегодня</p>
+                <p className="text-xs text-zinc-500 text-center py-10 italic">Данные отсутствуют</p>
               )}
             </div>
+            
+            <Link to="/analytics" className="mt-12 w-full flex items-center justify-center gap-3 bg-white/10 hover:bg-white/20 text-white py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] transition-all">
+              Подробная аналитика <TrendingUp size={16} />
+            </Link>
           </div>
         </div>
       </div>
@@ -172,22 +218,29 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ title, value, icon: Icon, trend, trendUp, color = "text-black" }: any) {
+function StatCard({ title, value, icon: Icon, trend, trendUp, color = "text-[#1F2937]" }: any) {
   return (
-    <div className="bg-white p-8 rounded-[2rem] border border-zinc-200 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between mb-6">
-        <div className={`w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center ${color}`}>
-          <Icon size={24} />
+    <motion.div 
+      whileHover={{ y: -5 }}
+      className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm hover:shadow-xl transition-all duration-300 relative group overflow-hidden"
+    >
+      <div className="absolute -right-4 -bottom-4 opacity-[0.03] group-hover:scale-125 group-hover:rotate-12 transition-transform duration-700">
+        <Icon size={120} />
+      </div>
+
+      <div className="flex items-center justify-between mb-8 relative z-10">
+        <div className={cn("w-14 h-14 rounded-[1.25rem] bg-zinc-50 flex items-center justify-center shadow-inner", color)}>
+          <Icon size={28} />
         </div>
         {trend && (
-          <div className={`flex items-center gap-1 text-xs font-bold ${trendUp ? 'text-emerald-500' : 'text-rose-500'}`}>
-            {trendUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+          <div className={cn("flex items-center gap-1 text-xs font-black", trendUp ? 'text-success' : 'text-error')}>
+            {trendUp ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
             {trend}
           </div>
         )}
       </div>
-      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">{title}</p>
-      <h4 className="text-4xl font-bold tracking-tight">{value}</h4>
-    </div>
+      <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-2 relative z-10">{title}</p>
+      <h4 className="text-5xl font-black tracking-tighter text-[#1F2937] relative z-10">{value}</h4>
+    </motion.div>
   );
 }
