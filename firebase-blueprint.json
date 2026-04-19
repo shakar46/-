@@ -37,7 +37,7 @@
         "uid": { "type": "string", "description": "Firebase Auth UID" },
         "email": { "type": "string", "format": "email", "description": "Google Account Email" },
         "displayName": { "type": "string", "description": "User's full name" },
-        "role": { "type": "string", "enum": ["admin", "operator", "manager"], "description": "User's role in the system" },
+        "role": { "type": "string", "enum": ["head", "admin", "operator", "manager"], "description": "User's role in the system" },
         "createdAt": { "type": "string", "format": "date-time" },
         "lastLogin": { "type": "string", "format": "date-time" }
       },

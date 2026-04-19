@@ -74,7 +74,7 @@ export default function Scripts() {
 
   const CATEGORIES = [
     "Скрипты гостей",
-    "Скрипты входящих запросов",
+    "Запрос ОВН",
     "Скрипты стандартных обращений",
     "Повторные корневые причины"
   ];
@@ -245,9 +245,10 @@ export default function Scripts() {
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
                   >
-                    {CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
+                    <option value="Скрипты гостей">Скрипты гостей</option>
+                    <option value="Запрос ОВН">Запрос ОВН</option>
+                    <option value="Скрипты стандартных обращений">Скрипты стандартных обращений</option>
+                    <option value="Повторные корневые причины">Повторные корневые причины</option>
                   </select>
                 </div>
               </div>

@@ -142,20 +142,6 @@ export default function HowTo() {
             </div>
           </div>
         </InstructionSection>
-
-        <div className="bg-black text-white p-12 rounded-[3rem] text-center space-y-6">
-          <HelpCircle size={48} className="mx-auto opacity-50" />
-          <h2 className="text-3xl font-bold">Остались вопросы?</h2>
-          <p className="text-zinc-400 max-w-md mx-auto">
-            Если у вас возникли трудности при работе с системой, обратитесь к системному администратору или в отдел аналитики.
-          </p>
-          <button 
-            onClick={() => window.location.href = 'mailto:support@example.com'}
-            className="inline-flex items-center gap-2 bg-white text-black px-8 py-4 rounded-2xl font-bold hover:scale-105 transition-all"
-          >
-            Написать в поддержку <ArrowRight size={20} />
-          </button>
-        </div>
       </div>
     </div>
   );

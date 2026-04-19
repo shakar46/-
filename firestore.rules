@@ -24,12 +24,16 @@ service cloud.firestore {
       return isEmailVerified() && request.auth.token.email == "shakar0406@gmail.com";
     }
 
+    function isHead() {
+      return isSuperAdmin() || (isEmailVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "head");
+    }
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isAdmin() {
-      return isSuperAdmin() || (isEmailVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "admin");
+      return isHead() || (isEmailVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "admin");
     }
 
     function isStaff() {
@@ -55,7 +59,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.email is string && data.email.size() <= 200 &&
              data.displayName is string && data.displayName.size() <= 100 &&
-             data.role in ["admin", "operator", "manager"];
+             data.role in ["head", "admin", "operator", "manager"];
     }
 
     function isValidAppeal(data) {
@@ -92,13 +96,13 @@ service cloud.firestore {
       allow get: if isStaff() || (isSignedIn() && request.auth.uid == userId);
       allow list: if isAdmin();
       
-      allow create: if (isAdmin() && isValidUser(incoming())) ||
+      allow create: if (isAdmin() && isValidUser(incoming()) && (incoming().role != 'head' || isHead())) ||
                     (isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) && 
                      !exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
                      incoming().email == request.auth.token.email &&
                      incoming().role == "operator");
       
-      allow update: if (isAdmin() && isValidUser(incoming()) && existing().email != "shakar0406@gmail.com") ||
+      allow update: if (isAdmin() && isValidUser(incoming()) && (incoming().role != 'head' || isHead()) && existing().email != "shakar0406@gmail.com") ||
                     (isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) && 
                      incoming().email == existing().email &&
                      incoming().role == existing().role);

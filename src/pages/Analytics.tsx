@@ -339,29 +339,20 @@ export default function Analytics() {
         const mappedMotivation = a.justification_status === "Обосновано" ? getMotivationDepartment(confirmedCls, confirmedSec, a.source || "") : (a.motivation_status || "—");
 
         return {
-          "БРЕНД / ФИЛИАЛ": truncate(a.branch_name || "—"),
-          "Дата отзыва": safeFormatDate(a.created_at, "dd.MM.yyyy HH:mm"),
-          "Дата заказа": truncate(a.order_date || "—"),
-          "Классификация (Класс)": truncate(confirmedCls),
-          "Раздел (Тип)": truncate(confirmedSec),
-          "Дополнительный комментарий": truncate(a.adjective_comment || "—"),
-          "Продукт / Сотрудник": truncate(a.product_employee || "—"),
-          "Чек заказа": truncate(a.order_receipt || "—"),
-          "Текст обращения": truncate(a.complaint_text || "—"),
-          "Имя клиента": truncate(a.client_name || "—"),
-          "Телефон": truncate(a.client_phone || "—"),
-          "Источник": truncate(a.source || "—"),
-          "Фотографии жалобы": truncate((a.complaint_photos || []).join(", ")),
-          "Кто принял жалобу": truncate(a.accepted_by || "—"),
-          "SIP аудиозапись (ссылка)": truncate(a.sip_link || "—"),
-          "Ответственный за коррекцию": truncate(a.responsible_person || "—"),
-          "Статус дедлайна": truncate(a.deadline || "—"),
-          "Моментальная коррекция": truncate(a.instant_correction || "—"),
-          "Анализ корневых причин": truncate(a.root_cause_analysis || "—"),
-          "Статус для отдела мотивации": truncate(mappedMotivation),
+          "ID": truncate(a.id),
+          "Дата создания": safeFormatDate(a.created_at, "dd.MM.yyyy HH:mm"),
+          "Статус": truncate(a.status || "—"),
+          "Филиал": truncate(a.branch_name || "—"),
+          "Клиент": truncate(a.client_name || "—"),
+          "Суть проблемы": truncate(a.complaint_text || "—"),
+          "Классификация": truncate(a.complaint_classification || "—"),
+          "Раздел": truncate(a.classification_section || "—"),
+          "Причина": truncate(a.root_cause_analysis || "—"),
+          "Требования к исправлению": truncate(a.solution || "—"),
           "Корректирующие действия": truncate(a.corrective_actions || "—"),
-          "Решение": truncate(a.solution || "—"),
-          "Обоснованность": truncate(a.justification_status || "—")
+          "Ответственные": truncate(a.responsible_person || "—"),
+          "Срок выполнения": safeFormatDate(a.completion_date, "dd.MM.yyyy HH:mm"),
+          "Ожидаемый результат": "Выполнено"
         };
       });
     } else {
@@ -828,10 +819,10 @@ export default function Analytics() {
             {/* Telegram Export Group */}
             <div className="relative group/tg">
               <button 
-                className="flex items-center gap-2 bg-[#0088CC] text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:brightness-110 transition-all shadow-md shadow-blue-500/10"
+                className="flex items-center gap-2 bg-black text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:scale-105 transition-all shadow-md shadow-black/10"
               >
                 <Send size={18} />
-                Отправить в телеграмм
+                Экспорт в Телеграмм
               </button>
               <div className="absolute left-0 bottom-full mb-3 w-64 bg-white border border-zinc-200 rounded-xl shadow-xl opacity-0 invisible group-hover/tg:opacity-100 group-hover/tg:visible transition-all z-[100] overflow-hidden p-1">
                 <button 
@@ -864,31 +855,31 @@ export default function Analytics() {
             {/* Excel Download Group */}
             <div className="relative group/dl">
               <button 
-                className="flex items-center gap-2 bg-[#0088CC] text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:brightness-110 transition-all shadow-md shadow-blue-500/10"
+                className="flex items-center gap-2 bg-black text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:scale-105 transition-all shadow-md shadow-black/10"
               >
                 <Download size={18} />
-                скачать Экзел файл
+                Экспорт в Excel
               </button>
               <div className="absolute left-0 bottom-full mb-3 w-64 bg-white border border-zinc-200 rounded-xl shadow-xl opacity-0 invisible group-hover/dl:opacity-100 group-hover/dl:visible transition-all z-[100] overflow-hidden p-1">
                 <button 
                   onClick={() => exportToExcel('daily')}
                   className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-zinc-50 rounded-lg transition-all border-b border-zinc-100 flex items-center justify-between"
                 >
-                  Стандартный XLSX
+                  Стандартный отчёт
                   <ChevronRight size={14} className="text-zinc-400" />
                 </button>
                 <button 
                   onClick={() => exportToExcel('weekly')}
                   className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-zinc-50 rounded-lg transition-all border-b border-zinc-100 flex items-center justify-between"
                 >
-                  сводный отчёт
+                  Сводный отчёт
                   <ChevronRight size={14} className="text-zinc-400" />
                 </button>
                 <button 
                   onClick={() => exportToExcel('comments')}
                   className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-zinc-50 rounded-lg transition-all flex items-center justify-between"
                 >
-                  Отчёт (Комментарии)
+                  Отчёт с комментариями
                   <ChevronRight size={14} className="text-zinc-400" />
                 </button>
               </div>

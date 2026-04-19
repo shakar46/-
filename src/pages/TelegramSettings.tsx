@@ -256,30 +256,6 @@ export default function TelegramSettings() {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-zinc-900 text-white p-8 rounded-3xl shadow-xl">
-            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6">
-              <ShieldCheck size={24} className="text-emerald-400" />
-            </div>
-            <h3 className="text-xl font-bold mb-4">Безопасность</h3>
-            <p className="text-zinc-400 text-sm leading-relaxed mb-6">
-              Ваши токены хранятся в зашифрованном виде в базе данных и доступны только администраторам системы.
-            </p>
-            <ul className="space-y-3 text-xs text-zinc-500">
-              <li className="flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-emerald-400" />
-                Доступ по ролям (RBAC)
-              </li>
-              <li className="flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-emerald-400" />
-                Логирование изменений
-              </li>
-              <li className="flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-emerald-400" />
-                Защищенное API Telegram
-              </li>
-            </ul>
-          </div>
-
           <div className="bg-white p-6 rounded-3xl border border-zinc-200">
             <h4 className="font-bold mb-3">Как настроить?</h4>
             <ol className="space-y-4 text-sm text-zinc-500 list-decimal pl-4">

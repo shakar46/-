@@ -43,7 +43,7 @@ interface UserData {
   uid?: string;
   email: string;
   displayName: string;
-  role: 'admin' | 'operator' | 'manager';
+  role: 'head' | 'admin' | 'operator' | 'manager';
   createdAt?: any;
   lastLogin?: string;
 }
@@ -56,13 +56,13 @@ const UserManagement = () => {
   const [roleFilter, setRoleFilter] = useState<string>("All");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
-  const [newRole, setNewRole] = useState<'admin' | 'operator' | 'manager'>('operator');
+  const [newRole, setNewRole] = useState<'head' | 'admin' | 'operator' | 'manager'>('operator');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   useEffect(() => {
-    if (userRole !== 'admin') return;
+    if (userRole !== 'admin' && userRole !== 'head') return;
 
     const q = query(collection(db, "users"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -108,7 +108,7 @@ const UserManagement = () => {
       await sendTelegramMessage(
         `👤 <b>Добавлен новый сотрудник</b>\n\n` +
         `📧 Email: ${newEmail.trim().toLowerCase()}\n` +
-        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : newRole === 'manager' ? 'Менеджер' : 'Оператор'}`
+        `🛡 Роль: ${newRole === 'head' ? 'Руководитель' : newRole === 'admin' ? 'Администратор' : newRole === 'manager' ? 'Менеджер' : 'Оператор'}`
       );
 
       // Send Audit notification
@@ -116,7 +116,7 @@ const UserManagement = () => {
         `🛡 <b>АУДИТ: Добавление пользователя</b>\n\n` +
         `👤 Кто добавил: ${currentUser?.displayName || 'Admin'} (${currentUser?.email})\n` +
         `📧 Кого добавили: ${newEmail.trim().toLowerCase()}\n` +
-        `🛡 Роль: ${newRole === 'admin' ? 'Администратор' : newRole === 'manager' ? 'Менеджер' : 'Оператор'}`,
+        `🛡 Роль: ${newRole === 'head' ? 'Руководитель' : newRole === 'admin' ? 'Администратор' : newRole === 'manager' ? 'Менеджер' : 'Оператор'}`,
         'audit'
       );
 
@@ -178,17 +178,24 @@ const UserManagement = () => {
     }
   };
 
-  const handleUpdateRole = async (userId: string, userEmail: string, currentRole: 'admin' | 'operator' | 'manager') => {
+  const handleUpdateRole = async (userId: string, userEmail: string, currentRole: 'head' | 'admin' | 'operator' | 'manager') => {
+    if (userRole !== 'head') {
+      alert("Только Руководитель может менять роли сотрудников");
+      return;
+    }
     if (userEmail === "shakar0406@gmail.com") {
       alert("Нельзя изменить роль главного администратора");
       return;
     }
 
-    const roles: ('admin' | 'operator' | 'manager')[] = ['operator', 'manager', 'admin'];
+    const roles: ('head' | 'admin' | 'operator' | 'manager')[] = userRole === 'head' 
+      ? ['operator', 'manager', 'admin', 'head']
+      : ['operator', 'manager', 'admin'];
+      
     const currentIndex = roles.indexOf(currentRole);
     const nextRole = roles[(currentIndex + 1) % roles.length];
     
-    if (!confirm(`Изменить роль пользователя ${userEmail} на ${nextRole === 'admin' ? 'Админ' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}?`)) return;
+    if (!confirm(`Изменить роль пользователя ${userEmail} на ${nextRole === 'head' ? 'Руководитель' : nextRole === 'admin' ? 'Админ' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}?`)) return;
 
     try {
       await updateDoc(doc(db, "users", userId), {
@@ -201,7 +208,7 @@ const UserManagement = () => {
         `🛡 <b>АУДИТ: Изменение роли</b>\n\n` +
         `👤 Кто изменил: ${currentUser?.displayName || 'Admin'} (${currentUser?.email})\n` +
         `📧 Пользователь: ${userEmail}\n` +
-        `🛡 Новая роль: ${nextRole === 'admin' ? 'Администратор' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}`,
+        `🛡 Новая роль: ${nextRole === 'head' ? 'Руководитель' : nextRole === 'admin' ? 'Администратор' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}`,
         'audit'
       );
 
@@ -234,7 +241,7 @@ const UserManagement = () => {
     return matchesSearch && matchesRole;
   });
 
-  if (userRole !== 'admin') {
+  if (userRole !== 'admin' && userRole !== 'head') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mb-6">
@@ -288,6 +295,7 @@ const UserManagement = () => {
               className="bg-zinc-50 border-none rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-black transition-all cursor-pointer w-full md:w-auto"
             >
               <option value="All">Все роли</option>
+              {userRole === 'head' && <option value="head">Руководители</option>}
               <option value="admin">Админы</option>
               <option value="manager">Менеджеры</option>
               <option value="operator">Операторы</option>
@@ -342,14 +350,15 @@ const UserManagement = () => {
                         disabled={u.email === "shakar0406@gmail.com"}
                         className={cn(
                           "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all",
+                          u.role === 'head' ? "bg-indigo-600 text-white" :
                           u.role === 'admin' ? "bg-black text-white" : 
                           u.role === 'manager' ? "bg-zinc-800 text-white" :
                           "bg-zinc-100 text-zinc-600",
                           u.email !== "shakar0406@gmail.com" && "hover:scale-105"
                         )}
                       >
-                        {u.role === 'admin' ? <Shield size={12} /> : u.role === 'manager' ? <Check size={12} /> : <Users size={12} />}
-                        {u.role === 'admin' ? 'Админ' : u.role === 'manager' ? 'Менеджер' : 'Оператор'}
+                        {u.role === 'head' ? <ShieldAlert size={12} /> : u.role === 'admin' ? <Shield size={12} /> : u.role === 'manager' ? <Check size={12} /> : <Users size={12} />}
+                        {u.role === 'head' ? 'Руководитель' : u.role === 'admin' ? 'Админ' : u.role === 'manager' ? 'Менеджер' : 'Оператор'}
                       </button>
                     </td>
                     <td className="px-8 py-5">
@@ -370,10 +379,11 @@ const UserManagement = () => {
                       {u.email !== "shakar0406@gmail.com" && (
                         <button 
                           onClick={() => handleDeleteUser(u.id, u.email)}
-                          className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                          title="Удалить"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all font-bold text-xs"
+                          title="Удалить сотрудника"
                         >
-                          <Trash2 size={18} />
+                          <Trash2 size={16} />
+                          <span className="hidden xl:inline">Удалить</span>
                         </button>
                       )}
                     </td>
@@ -435,7 +445,7 @@ const UserManagement = () => {
 
                 <div>
                   <label className="block text-sm font-bold text-zinc-700 mb-2 px-1">Роль</label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className={cn("grid gap-3", userRole === 'head' ? "grid-cols-4" : "grid-cols-3")}>
                     <button
                       type="button"
                       onClick={() => setNewRole('operator')}
@@ -469,6 +479,19 @@ const UserManagement = () => {
                       <Shield size={20} className={newRole === 'admin' ? "text-black" : "text-zinc-400"} />
                       <p className="font-bold text-[10px]">Админ</p>
                     </button>
+                    {userRole === 'head' && (
+                      <button
+                        type="button"
+                        onClick={() => setNewRole('head')}
+                        className={cn(
+                          "flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-2",
+                          newRole === 'head' ? "border-indigo-600 bg-indigo-50" : "border-zinc-100 bg-white hover:border-zinc-200"
+                        )}
+                      >
+                        <ShieldAlert size={20} className={newRole === 'head' ? "text-indigo-600" : "text-zinc-400"} />
+                        <p className="font-bold text-[10px]">Руководитель</p>
+                      </button>
+                    )}
                   </div>
                 </div>
 

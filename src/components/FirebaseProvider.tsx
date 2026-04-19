@@ -59,7 +59,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         if (!snapshot.empty) {
           const userDoc = snapshot.docs[0];
-          const uData = userDoc.data();
+          let uData = userDoc.data();
+          
+          // Force 'head' role for the super user
+          if (user.email === "shakar0406@gmail.com" && uData.role !== "head") {
+            uData.role = "head";
+            await setDoc(doc(db, 'users', userDoc.id), uData, { merge: true });
+          }
           
           // If this is a pre-added user (no UID yet) or if the UID document doesn't exist
           if (!uData.uid || userDoc.id !== user.uid) {
@@ -99,12 +105,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setIsAuthorized(true);
           }
         } else if (user.email === "shakar0406@gmail.com") {
-          // Auto-provision the super admin if not found
-          const role = "admin";
+          // Auto-provision the super admin if not found (Head role)
+          const role = "head";
           const adminData = {
             uid: user.uid,
             email: user.email,
-            displayName: user.displayName || "Super Admin",
+            displayName: user.displayName || "Руководитель",
             role: role,
             createdAt: new Date().toISOString(),
             lastLogin: new Date().toISOString()

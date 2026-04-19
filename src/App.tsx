@@ -26,7 +26,8 @@ import {
   History,
   Zap,
   HelpCircle,
-  AlertCircle
+  AlertCircle,
+  TrendingUp
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { FirebaseProvider, useFirebase } from "./components/FirebaseProvider";
@@ -60,6 +61,7 @@ import UserManagement from "./pages/UserManagement";
 import ComplaintResolutions from "./pages/ComplaintResolutions";
 import AnalyticsDetail from "./pages/AnalyticsDetail";
 import LearningBase from "./pages/LearningBase";
+import PerformanceStats from "./pages/PerformanceStats";
 
 
 const SidebarItem = ({ to, icon: Icon, label, active }: SidebarItemProps) => {
@@ -104,7 +106,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/how-to", icon: HelpCircle, label: "Инфо" },
   ];
 
-  if (userRole === "admin") {
+  if (userRole === "head") {
+    menuItems.push({ to: "/performance", icon: TrendingUp, label: "Продуктивность" });
+  }
+
+  if (userRole === "admin" || userRole === "head") {
     menuItems.push({ to: "/users", icon: Users, label: "Команда" });
     menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
   }
@@ -361,6 +367,7 @@ export default function App() {
               <Route path="/poisoning-appeal" element={<PoisoningAppeal />} />
               <Route path="/scripts" element={<Scripts />} />
               <Route path="/learning-base" element={<LearningBase />} />
+              <Route path="/performance" element={<PerformanceStats />} />
               <Route path="/how-to" element={<HowTo />} />
               <Route path="/form" element={<PublicForm />} />
             </Routes>

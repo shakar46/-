@@ -252,7 +252,7 @@ export default function Appeals() {
             className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary/90 transition-all shadow-md shadow-primary/10"
           >
             <Plus size={18} />
-            Создать инцидент
+            Оставить отзыв
           </Link>
         </div>
       </header>
@@ -616,7 +616,7 @@ export default function Appeals() {
         <footer className="px-10 py-6 bg-white border-t border-zinc-50 flex flex-col xl:flex-row items-center justify-between gap-6 z-[60]">
           <div className="flex items-center gap-6 order-2 xl:order-1">
             <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] bg-zinc-50 px-5 py-3 rounded-2xl shadow-inner italic">
-              Платформа ALPHA <span className="text-zinc-200 mx-2">|</span> 
+              Платформа SHAKAR <span className="text-zinc-200 mx-2">|</span> 
               Записи <span className="text-primary">{filteredAppeals.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}—{Math.min(filteredAppeals.length, currentPage * itemsPerPage)}</span> 
               из <span className="text-primary">{filteredAppeals.length}</span>
             </p>

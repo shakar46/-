@@ -507,9 +507,11 @@ export default function AppealDetail() {
       
       setSaveStatus("success");
       setTimeout(() => setSaveStatus("idle"), 3000);
-    } catch (err) {
+    } catch (err: any) {
       setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
+      const errorMessage = err?.message || "Неизвестная ошибка";
+      alert(`Ошибка при сохранении: ${errorMessage}`);
+      setTimeout(() => setSaveStatus("idle"), 5000);
       handleFirestoreError(err, id === "new" ? OperationType.CREATE : OperationType.UPDATE, "appeals");
     }
     setSaving(false);
@@ -546,22 +548,6 @@ export default function AppealDetail() {
         fields_filled: ["instant_correction", "solution", "status"],
         timestamp: processedAt
       });
-
-      // Telegram notification
-      const settingsSnap = await getDoc(doc(db, "settings", "telegram"));
-      if (settingsSnap.exists() && settingsSnap.data().notifications_enabled) {
-        const { telegram_token, telegram_chat_id } = settingsSnap.data();
-        if (telegram_token && telegram_chat_id) {
-          const message = `✅ <b>Жалоба обработана</b>\n\n` +
-            `👤 <b>Менеджер:</b> ${user?.displayName || "User"}\n` +
-            `📍 <b>Филиал:</b> ${appeal.branch_name}\n` +
-            `👤 <b>Клиент:</b> ${appeal.client_name}\n` +
-            `📅 <b>Дата заказа:</b> ${appeal.order_date ? format(new Date(appeal.order_date), "dd.MM.yyyy") : "—"}\n` +
-            `🔗 <a href="${window.location.origin}/#/appeals/${id}">Просмотреть детали</a>`;
-
-          await sendTelegramMessage(message, 'main');
-        }
-      }
 
       setAppeal(updateData as Appeal);
       fetchAuditLogs();
@@ -693,6 +679,17 @@ export default function AppealDetail() {
         </div>
       </header>
 
+      {saveStatus === "error" && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-rose-50 border border-rose-200 text-rose-600 p-4 rounded-xl flex items-center gap-3 font-medium mb-4"
+        >
+          <AlertCircle size={20} />
+          <span>Произошла ошибка при сохранении. Убедитесь, что все обязательные поля заполнены.</span>
+        </motion.div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Main Info */}
         <div className="lg:col-span-2 space-y-8">
@@ -818,28 +815,6 @@ export default function AppealDetail() {
                   placeholder="ФИО специалиста..."
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Мгновенное исправление ответственным лицом</label>
-              <textarea 
-                rows={2}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all resize-none"
-                value={appeal.instant_correction || ""}
-                onChange={(e) => setAppeal({...appeal, instant_correction: e.target.value})}
-                placeholder="Опишите мгновенное исправление..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Решение</label>
-              <textarea 
-                rows={2}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all resize-none"
-                value={appeal.solution || ""}
-                onChange={(e) => setAppeal({...appeal, solution: e.target.value})}
-                placeholder="Опишите принятое решение..."
-              />
             </div>
 
             <div>
@@ -978,13 +953,13 @@ export default function AppealDetail() {
 
           <section className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <AlertCircle size={20} className="text-zinc-400" /> Анализ и Решение
+              <AlertCircle size={20} className="text-zinc-400" /> Анализ
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Дата выполнения (Deadline)</label>
                 <input 
-                  type="date"
+                  type="datetime-local"
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
                   value={appeal.completion_date || ""}
                   onChange={(e) => setAppeal({...appeal, completion_date: e.target.value})}
@@ -1010,14 +985,33 @@ export default function AppealDetail() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">SIP — аудиозапись</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
-                  value={appeal.sip_link || ""}
-                  onChange={(e) => setAppeal({...appeal, sip_link: e.target.value})}
-                  placeholder="Ссылка на аудиозапись..."
-                />
+                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Загрузить файл / Аудиозапись</label>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="text" 
+                    className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all"
+                    value={appeal.sip_link || ""}
+                    onChange={(e) => setAppeal({...appeal, sip_link: e.target.value})}
+                    placeholder="Ссылка на файл или загрузите..."
+                  />
+                  <label className="p-3 bg-zinc-100 hover:bg-zinc-200 rounded-xl cursor-pointer transition-colors">
+                    <Download size={20} className="text-zinc-600" />
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setAppeal({...appeal, sip_link: reader.result as string});
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
@@ -1083,15 +1077,6 @@ export default function AppealDetail() {
                   placeholder="Выберите разделы..."
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Анализ корневых причин</label>
-              <textarea 
-                rows={3}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all resize-none"
-                value={appeal.root_cause_analysis || ""}
-                onChange={(e) => setAppeal({...appeal, root_cause_analysis: e.target.value})}
-              />
             </div>
             <div>
               <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Корректирующие действия</label>
