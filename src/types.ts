@@ -58,6 +58,7 @@ export interface Appeal {
   processed_at?: string;
   justification_status?: 'Обосновано' | 'Необосновано';
   complaint_status?: 'Критические' | 'Значимые' | 'Незначимые';
+  branch?: string;
 }
 
 export interface PoisoningAppeal {

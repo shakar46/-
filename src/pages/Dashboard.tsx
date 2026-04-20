@@ -18,8 +18,10 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { motion } from "motion/react";
 import { cn } from "../lib/utils";
+import { useFirebase } from "../components/FirebaseProvider";
 
 export default function Dashboard() {
+  const { userRole, userData } = useFirebase();
   const [stats, setStats] = useState({
     total: 0,
     new: 0,
@@ -43,13 +45,19 @@ export default function Dashboard() {
           orderBy("created_at", "desc")
         );
         const querySnapshot = await getDocs(q);
-        const allData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        let allData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
         
+        // Filter by branch for managers
+        if (userRole === 'manager' && userData?.responsibleBranch) {
+          allData = allData.filter(a => a.branch === userData.responsibleBranch);
+        }
+
         const todayAppeals = allData.filter(a => new Date(a.created_at) >= today);
         const recent = todayAppeals.slice(0, 5);
 
         const branchCounts = todayAppeals.reduce((acc: any, curr: any) => {
-          acc[curr.branch_name] = (acc[curr.branch_name] || 0) + 1;
+          const bName = curr.branch || curr.branch_name || "Неизвестно";
+          acc[bName] = (acc[bName] || 0) + 1;
           return acc;
         }, {});
 

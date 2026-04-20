@@ -16,28 +16,24 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isEmailVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+    function getSession() {
+      return get(/databases/$(database)/documents/session_uids/$(request.auth.uid)).data;
     }
 
-    function isSuperAdmin() {
-      return isEmailVerified() && request.auth.token.email == "shakar0406@gmail.com";
+    function hasSession() {
+      return isSignedIn() && exists(/databases/$(database)/documents/session_uids/$(request.auth.uid));
     }
 
     function isHead() {
-      return isSuperAdmin() || (isEmailVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "head");
-    }
-
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return hasSession() && (getSession().role == "head" || getSession().email == "shakar0406@gmail.com");
     }
 
     function isAdmin() {
-      return isHead() || (isEmailVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == "admin");
+      return isHead() || (hasSession() && getSession().role == "admin");
     }
 
     function isStaff() {
-      return isAdmin() || (isEmailVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role in ["operator", "manager"]);
+      return isAdmin() || (hasSession() && getSession().role in ["operator", "manager"]);
     }
 
     function incoming() {
@@ -57,7 +53,7 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      return data.email is string && data.email.size() <= 200 &&
+      return data.login is string && data.login.size() <= 100 &&
              data.displayName is string && data.displayName.size() <= 100 &&
              data.role in ["head", "admin", "operator", "manager"];
     }
@@ -93,21 +89,21 @@ service cloud.firestore {
 
     // Users Collection
     match /users/{userId} {
-      allow get: if isStaff() || (isSignedIn() && request.auth.uid == userId);
+      allow get: if true; // Needed for login check
       allow list: if isAdmin();
       
       allow create: if (isAdmin() && isValidUser(incoming()) && (incoming().role != 'head' || isHead())) ||
-                    (isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) && 
-                     !exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                     incoming().email == request.auth.token.email &&
-                     incoming().role == "operator");
+                    (isSignedIn() && isValidUser(incoming())); 
       
       allow update: if (isAdmin() && isValidUser(incoming()) && (incoming().role != 'head' || isHead()) && existing().email != "shakar0406@gmail.com") ||
-                    (isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) && 
-                     incoming().email == existing().email &&
-                     incoming().role == existing().role);
+                    (hasSession() && getSession().login == existing().login);
       
       allow delete: if isAdmin() && existing().email != "shakar0406@gmail.com";
+    }
+
+    match /session_uids/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid;
     }
 
     // Appeals Collection

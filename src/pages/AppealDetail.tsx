@@ -953,7 +953,7 @@ export default function AppealDetail() {
 
           <section className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <AlertCircle size={20} className="text-zinc-400" /> Анализ
+              <AlertCircle size={20} className="text-zinc-400" /> Анализ и Решение
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">

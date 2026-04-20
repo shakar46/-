@@ -33,7 +33,6 @@ import * as XLSX from "xlsx";
 import { cn } from "../lib/utils";
 
 export default function Appeals() {
-  const { userRole } = useFirebase();
   const location = useLocation();
   const [appeals, setAppeals] = useState<Appeal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,12 +57,19 @@ export default function Appeals() {
     fetchAppeals();
   }, [location.search]);
 
+  const { userRole, userData } = useFirebase();
+
   const fetchAppeals = async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, "appeals"), orderBy("created_at", "desc"), limit(500));
+      const q = query(collection(db, "appeals"), orderBy("created_at", "desc"), limit(1000));
       const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appeal));
+      let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appeal));
+      
+      if (userRole === 'manager' && userData?.responsibleBranch) {
+        data = data.filter(a => a.branch === userData.responsibleBranch);
+      }
+      
       setAppeals(data);
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, "appeals");

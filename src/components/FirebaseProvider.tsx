@@ -1,15 +1,17 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db } from '../firebase';
-import { doc, getDoc, setDoc, collection, query, where, onSnapshot, deleteDoc } from 'firebase/firestore';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { db, auth } from '../firebase';
 
 interface FirebaseContextType {
-  user: User | null;
+  user: any | null;
   userRole: string | null;
   userData: any | null;
   isAuthorized: boolean;
   loading: boolean;
   error: string | null;
+  login: (login: string, password: string) => Promise<void>;
+  logout: () => void;
 }
 
 const FirebaseContext = createContext<FirebaseContextType>({
@@ -19,128 +21,121 @@ const FirebaseContext = createContext<FirebaseContextType>({
   isAuthorized: false,
   loading: true,
   error: null,
+  login: async () => {},
+  logout: () => {},
 });
 
 export const useFirebase = () => useContext(FirebaseContext);
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userData, setUserData] = useState<any | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      if (!firebaseUser) {
-        setUserData(null);
-        setUserRole(null);
-        setIsAuthorized(false);
-        setLoading(false);
-        setError(null);
-      }
-    });
-
-    return () => unsubscribeAuth();
-  }, []);
+  const logout = async () => {
+    localStorage.removeItem('crm_session_id');
+    localStorage.removeItem('crm_login');
+    setCurrentUser(null);
+    setUserData(null);
+    setUserRole(null);
+    setIsAuthorized(false);
+    await signOut(auth);
+  };
 
   useEffect(() => {
-    if (!user) return;
-
-    setLoading(true);
-    setError(null);
-    
-    // Listen for user data changes by email
-    const q = query(collection(db, 'users'), where('email', '==', user.email || ""));
-
-    const unsubscribeSnapshot = onSnapshot(q, async (snapshot) => {
-      try {
-        if (!snapshot.empty) {
-          const userDoc = snapshot.docs[0];
-          let uData = userDoc.data();
-          
-          // Force 'head' role for the super user
-          if (user.email === "shakar0406@gmail.com" && uData.role !== "head") {
-            uData.role = "head";
-            await setDoc(doc(db, 'users', userDoc.id), uData, { merge: true });
-          }
-          
-          // If this is a pre-added user (no UID yet) or if the UID document doesn't exist
-          if (!uData.uid || userDoc.id !== user.uid) {
-            const finalData = {
-              ...uData,
-              uid: user.uid,
-              displayName: user.displayName || uData.displayName || "User",
-              lastLogin: new Date().toISOString()
-            };
-
-            // Link UID to the user document (using UID as the document ID is better for security rules)
-            await setDoc(doc(db, 'users', user.uid), finalData);
-            
-            // Delete the old document if it was a pre-added one with a random ID
-            if (userDoc.id !== user.uid) {
-              await deleteDoc(doc(db, 'users', userDoc.id));
-            }
-            
-            setUserData(finalData);
-            setUserRole(uData.role);
-            setIsAuthorized(true);
-          } else {
-            // Update lastLogin if it's been more than 5 minutes since the last update
-            const now = new Date();
-            const lastUpdate = uData.lastLogin ? new Date(uData.lastLogin) : new Date(0);
-            const diffMinutes = (now.getTime() - lastUpdate.getTime()) / (1000 * 60);
-
-            if (diffMinutes > 5) {
-              await setDoc(doc(db, 'users', user.uid), {
-                ...uData,
-                lastLogin: now.toISOString()
-              });
-            }
-
-            setUserData(uData);
-            setUserRole(uData.role);
-            setIsAuthorized(true);
-          }
-        } else if (user.email === "shakar0406@gmail.com") {
-          // Auto-provision the super admin if not found (Head role)
-          const role = "head";
-          const adminData = {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName || "Руководитель",
-            role: role,
-            createdAt: new Date().toISOString(),
-            lastLogin: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'users', user.uid), adminData);
-          setUserData(adminData);
-          setUserRole(role);
-          setIsAuthorized(true);
-        } else {
-          setUserData(null);
-          setUserRole(null);
-          setIsAuthorized(false);
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        const loginName = localStorage.getItem('crm_login');
+        if (loginName) {
+           const id = loginName.trim().toLowerCase().replace(/\s+/g, '_');
+           try {
+             const userDoc = await getDoc(doc(db, 'users', id));
+             if (userDoc.exists()) {
+               const uData = userDoc.data();
+               if (uData.uid === fbUser.uid) {
+                  setCurrentUser(fbUser);
+                  setUserData(uData);
+                  setUserRole(uData.role);
+                  setIsAuthorized(true);
+               } else {
+                 await logout();
+               }
+             } else {
+               await logout();
+             }
+           } catch (err) {
+             console.error("Session sync error:", err);
+           }
         }
-      } catch (err: any) {
-        console.error("Error during user data sync:", err);
-        setError(err.message || "Ошибка при синхронизации данных пользователя");
-      } finally {
-        setLoading(false);
+      } else {
+        setIsAuthorized(false);
       }
-    }, (error) => {
-      console.error("Firestore listener error:", error);
-      setError(error.message || "Ошибка при получении данных пользователя");
       setLoading(false);
     });
 
-    return () => unsubscribeSnapshot();
-  }, [user]);
+    return () => unsubscribe();
+  }, []);
+
+  const login = async (loginName: string, passwordString: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 1. Authenticate anonymously for Firebase context
+      const authResult = await signInAnonymously(auth);
+      const fbUser = authResult.user;
+
+      // 2. Find user in Firestore
+      const q = query(
+        collection(db, 'users'), 
+        where('login', '==', loginName.trim()),
+        where('password', '==', passwordString.trim())
+      );
+      
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        throw new Error("Неверный логин или пароль");
+      }
+
+      const userDoc = snapshot.docs[0];
+      const uData = userDoc.data();
+      
+      // 3. Link Anonymous UID to this user record for Firestore Rules
+      await setDoc(doc(db, 'users', userDoc.id), {
+        ...uData,
+        uid: fbUser.uid,
+        lastLogin: new Date().toISOString()
+      }, { merge: true });
+
+      // 4. Create a session mapping for security rules
+      await setDoc(doc(db, 'session_uids', fbUser.uid), {
+        login: loginName.trim(),
+        role: uData.role,
+        email: uData.email || "",
+        createdAt: new Date().toISOString()
+      });
+
+      localStorage.setItem('crm_session_id', userDoc.id);
+      localStorage.setItem('crm_login', loginName.trim());
+      
+      setCurrentUser(fbUser);
+      setUserData({ ...uData, uid: fbUser.uid });
+      setUserRole(uData.role);
+      setIsAuthorized(true);
+
+    } catch (err: any) {
+      setError(err.message || "Ошибка входа");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <FirebaseContext.Provider value={{ user, userRole, userData, isAuthorized, loading, error }}>
+    <FirebaseContext.Provider value={{ user: currentUser, userRole, userData, isAuthorized, loading, error, login, logout }}>
       {children}
     </FirebaseContext.Provider>
   );

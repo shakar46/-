@@ -64,6 +64,20 @@ import LearningBase from "./pages/LearningBase";
 import PerformanceStats from "./pages/PerformanceStats";
 
 
+import { Login } from "./pages/Login";
+
+const PageTransition = ({ children }: { children: React.ReactNode }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -10 }}
+    transition={{ duration: 0.2 }}
+    className="w-full"
+  >
+    {children}
+  </motion.div>
+);
+
 const SidebarItem = ({ to, icon: Icon, label, active }: SidebarItemProps) => {
   const navigate = useNavigate();
   return (
@@ -92,7 +106,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, userRole, userData, isAuthorized, loading: firebaseLoading, error: firebaseError } = useFirebase();
+  const { user, userRole, userData, isAuthorized, loading: firebaseLoading, logout } = useFirebase();
 
   const menuItems = [
     { to: "/", icon: LayoutDashboard, label: "Обзор" },
@@ -115,100 +129,31 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
   }
 
-  const handleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      if (result.user) {
-        const userDoc = await getDoc(doc(db, 'users', result.user.uid));
-        const userData = userDoc.exists() ? userDoc.data() : null;
-        await logEvent({
-          userId: result.user.uid,
-          userEmail: result.user.email || "",
-          userName: result.user.displayName || userData?.displayName || "User",
-          type: 'login',
-          action: 'Вход в систему'
-        });
-      }
-    } catch (error) {
-      console.error("Error signing in with Google:", error);
-    }
-  };
-
-  const handleLogout = async () => {
-    if (user) {
-      await logEvent({
-        userId: user.uid,
-        userEmail: user.email || "",
-        userName: user.displayName || "User",
-        type: 'logout',
-        action: 'Выход из системы'
-      });
-      await signOut(auth);
+  const handleLogout = () => {
+    if (window.confirm("Вы уверены, что хотите выйти?")) {
+      logout();
+      navigate('/');
     }
   };
 
   if (firebaseLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50">
-        <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-        <p className="mt-4 text-zinc-400 font-medium text-sm lg:text-base">Загрузка системы...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 font-segoe">
+        <motion.div 
+          animate={{ scale: [1, 1.1, 1], rotate: [0, 90, 0] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="w-16 h-16 bg-black rounded-3xl flex items-center justify-center shadow-xl shadow-black/10"
+        >
+          <ShieldCheck size={32} className="text-white" />
+        </motion.div>
+        <p className="mt-8 text-zinc-900 font-black text-xl uppercase tracking-widest animate-pulse">Platform SHAKAR</p>
+        <p className="mt-2 text-zinc-400 font-bold text-sm tracking-tighter uppercase">Загрузка системы...</p>
       </div>
     );
   }
 
-  if (!user && location.pathname !== "/form") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-100 p-4">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-white rounded-2xl p-10 shadow-xl text-center"
-        >
-          <div className="w-20 h-20 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-lg shadow-primary/20">
-            <ShieldCheck size={40} className="text-white" />
-          </div>
-          <h2 className="text-2xl font-bold mb-2 text-zinc-900">CRM Платформа</h2>
-          <p className="text-zinc-500 mb-8 font-medium">Система управления качеством</p>
-          
-          <button
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-primary/90 transition-all shadow-md"
-          >
-            <LogIn size={20} />
-            Войти через Google
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
-
-  if (user && !isAuthorized && location.pathname !== "/form") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full bg-white rounded-2xl p-10 shadow-xl text-center border border-red-100"
-        >
-          <div className="w-20 h-20 bg-red-100 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-8">
-            <AlertCircle size={40} />
-          </div>
-          <h2 className="text-xl font-bold mb-2 text-zinc-900">Доступ ограничен</h2>
-          <p className="text-zinc-500 mb-8 font-medium">
-            {firebaseError || "Ваш аккаунт не авторизован Пожалуйста, обратитесь к администратору."}
-          </p>
-          
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-3 bg-zinc-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-all"
-          >
-            <LogOut size={20} />
-            Выйти
-          </button>
-        </motion.div>
-      </div>
-    );
+  if (!isAuthorized && location.pathname !== "/form") {
+    return <Login />;
   }
 
   return (
@@ -340,8 +285,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <main className="flex-1 lg:p-10 p-6 pt-24 lg:pt-10 max-w-7xl mx-auto w-full min-h-screen">
-        {children}
+      <main className="flex-1 lg:p-10 p-6 pt-24 lg:pt-10 max-w-7xl mx-auto w-full min-h-screen overflow-hidden">
+        <AnimatePresence mode="wait">
+          {children}
+        </AnimatePresence>
       </main>
     </div>
   );
@@ -354,21 +301,21 @@ export default function App() {
         <Router>
           <Layout>
             <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/appeals" element={<Appeals />} />
-              <Route path="/appeals/:id" element={<AppealDetail />} />
-              <Route path="/repeating" element={<RepeatingAppeals />} />
-              <Route path="/resolutions" element={<ComplaintResolutions />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/analytics/:type" element={<AnalyticsDetail />} />
-              <Route path="/settings" element={<TelegramSettings />} />
-              <Route path="/users" element={<UserManagement />} />
-              <Route path="/quick-appeal" element={<QuickAppeal />} />
-              <Route path="/poisoning-appeal" element={<PoisoningAppeal />} />
-              <Route path="/scripts" element={<Scripts />} />
-              <Route path="/learning-base" element={<LearningBase />} />
-              <Route path="/performance" element={<PerformanceStats />} />
-              <Route path="/how-to" element={<HowTo />} />
+              <Route path="/" element={<PageTransition><Dashboard /></PageTransition>} />
+              <Route path="/appeals" element={<PageTransition><Appeals /></PageTransition>} />
+              <Route path="/appeals/:id" element={<PageTransition><AppealDetail /></PageTransition>} />
+              <Route path="/repeating" element={<PageTransition><RepeatingAppeals /></PageTransition>} />
+              <Route path="/resolutions" element={<PageTransition><ComplaintResolutions /></PageTransition>} />
+              <Route path="/analytics" element={<PageTransition><Analytics /></PageTransition>} />
+              <Route path="/analytics/:type" element={<PageTransition><AnalyticsDetail /></PageTransition>} />
+              <Route path="/settings" element={<PageTransition><TelegramSettings /></PageTransition>} />
+              <Route path="/users" element={<PageTransition><UserManagement /></PageTransition>} />
+              <Route path="/quick-appeal" element={<PageTransition><QuickAppeal /></PageTransition>} />
+              <Route path="/poisoning-appeal" element={<PageTransition><PoisoningAppeal /></PageTransition>} />
+              <Route path="/scripts" element={<PageTransition><Scripts /></PageTransition>} />
+              <Route path="/learning-base" element={<PageTransition><LearningBase /></PageTransition>} />
+              <Route path="/performance" element={<PageTransition><PerformanceStats /></PageTransition>} />
+              <Route path="/how-to" element={<PageTransition><HowTo /></PageTransition>} />
               <Route path="/form" element={<PublicForm />} />
             </Routes>
           </Layout>
