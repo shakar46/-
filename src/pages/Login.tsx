@@ -51,7 +51,7 @@ export const Login = () => {
           >
             <ShieldCheck size={40} className="text-white" />
           </motion.div>
-          <h1 className="text-4xl font-black tracking-tight text-zinc-900 mb-2">Platform SHAKAR</h1>
+          <h1 className="text-4xl font-black tracking-tight text-zinc-900 mb-2">CRM</h1>
           <p className="text-zinc-500 font-medium">CRM Система — Управление жалобами</p>
         </div>
 
@@ -122,7 +122,7 @@ export const Login = () => {
         </div>
 
         <p className="text-center mt-8 text-zinc-400 text-sm font-bold">
-          &copy; 2026 SHAKAR TEAM. Все права защищены.
+          &copy; 2026 CRM. Все права защищены.
         </p>
       </motion.div>
     </div>

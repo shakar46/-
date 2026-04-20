@@ -146,7 +146,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         >
           <ShieldCheck size={32} className="text-white" />
         </motion.div>
-        <p className="mt-8 text-zinc-900 font-black text-xl uppercase tracking-widest animate-pulse">Platform SHAKAR</p>
+        <p className="mt-8 text-zinc-900 font-black text-xl uppercase tracking-widest animate-pulse">CRM</p>
         <p className="mt-2 text-zinc-400 font-bold text-sm tracking-tighter uppercase">Загрузка системы...</p>
       </div>
     );

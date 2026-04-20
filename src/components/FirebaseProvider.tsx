@@ -87,36 +87,35 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const authResult = await signInAnonymously(auth);
       const fbUser = authResult.user;
 
-      // 2. Find user in Firestore
-      const q = query(
-        collection(db, 'users'), 
-        where('login', '==', loginName.trim()),
-        where('password', '==', passwordString.trim())
-      );
+      // 2. Derive ID and Fetch user doc directly (uses 'get' permission which is open)
+      const id = loginName.trim().toLowerCase().replace(/\s+/g, '_');
+      const userDoc = await getDoc(doc(db, 'users', id));
       
-      const snapshot = await getDocs(q);
-      
-      if (snapshot.empty) {
-        throw new Error("Неверный логин или пароль");
+      if (!userDoc.exists()) {
+        throw new Error("Пользователь не найден");
       }
 
-      const userDoc = snapshot.docs[0];
       const uData = userDoc.data();
       
-      // 3. Link Anonymous UID to this user record for Firestore Rules
-      await setDoc(doc(db, 'users', userDoc.id), {
-        ...uData,
-        uid: fbUser.uid,
-        lastLogin: new Date().toISOString()
-      }, { merge: true });
-
-      // 4. Create a session mapping for security rules
+      // 3. Verify password
+      if (uData.password !== passwordString.trim()) {
+        throw new Error("Неверный пароль");
+      }
+      
+      // 4. Create a session mapping for security rules FIRST
       await setDoc(doc(db, 'session_uids', fbUser.uid), {
         login: loginName.trim(),
         role: uData.role,
         email: uData.email || "",
         createdAt: new Date().toISOString()
       });
+
+      // 5. Link Anonymous UID to this user record for Firestore Rules (now hasSession() will be true)
+      await setDoc(doc(db, 'users', userDoc.id), {
+        ...uData,
+        uid: fbUser.uid,
+        lastLogin: new Date().toISOString()
+      }, { merge: true });
 
       localStorage.setItem('crm_session_id', userDoc.id);
       localStorage.setItem('crm_login', loginName.trim());

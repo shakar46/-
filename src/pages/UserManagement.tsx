@@ -322,7 +322,7 @@ const UserManagement = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
             <input 
               type="text"
-              placeholder="Поиск по email или имени..."
+              placeholder="Поиск по имени..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-12 pr-4 py-3 bg-zinc-50 border-none rounded-xl focus:ring-2 focus:ring-black transition-all"
@@ -382,7 +382,6 @@ const UserManagement = () => {
                         </div>
                         <div>
                           <p className="font-bold text-zinc-900">{u.displayName}</p>
-                          <p className="text-sm text-zinc-500">{u.email || "—"}</p>
                         </div>
                       </div>
                     </td>
@@ -475,7 +474,7 @@ const UserManagement = () => {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6">
                   <div>
                     <label className="block text-sm font-bold text-zinc-700 mb-2 px-1">Имя сотрудника</label>
                     <input 
@@ -484,16 +483,6 @@ const UserManagement = () => {
                       placeholder="Имя Фамилия"
                       value={formData.displayName}
                       onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                      className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-black transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-zinc-700 mb-2 px-1">Email (опционально)</label>
-                    <input 
-                      type="email"
-                      placeholder="example@gmail.com"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-black transition-all"
                     />
                   </div>
