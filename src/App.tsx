@@ -27,7 +27,8 @@ import {
   Zap,
   HelpCircle,
   AlertCircle,
-  TrendingUp
+  TrendingUp,
+  User
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { FirebaseProvider, useFirebase } from "./components/FirebaseProvider";
@@ -62,6 +63,7 @@ import ComplaintResolutions from "./pages/ComplaintResolutions";
 import AnalyticsDetail from "./pages/AnalyticsDetail";
 import LearningBase from "./pages/LearningBase";
 import PerformanceStats from "./pages/PerformanceStats";
+import { Profile } from "./pages/Profile";
 
 
 import { Login } from "./pages/Login";
@@ -117,6 +119,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/analytics", icon: BarChart3, label: "Аналитика" },
     { to: "/scripts", icon: Zap, label: "Скрипты" },
     { to: "/learning-base", icon: FileText, label: "База обучения" },
+    { to: "/profile", icon: User, label: "Профиль" },
     { to: "/how-to", icon: HelpCircle, label: "Инфо" },
   ];
 
@@ -315,6 +318,7 @@ export default function App() {
               <Route path="/scripts" element={<PageTransition><Scripts /></PageTransition>} />
               <Route path="/learning-base" element={<PageTransition><LearningBase /></PageTransition>} />
               <Route path="/performance" element={<PageTransition><PerformanceStats /></PageTransition>} />
+              <Route path="/profile" element={<PageTransition><Profile /></PageTransition>} />
               <Route path="/how-to" element={<PageTransition><HowTo /></PageTransition>} />
               <Route path="/form" element={<PublicForm />} />
             </Routes>

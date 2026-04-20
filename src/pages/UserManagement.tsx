@@ -251,11 +251,11 @@ const UserManagement = () => {
       // Log action
       await logEvent({
         userId: currentUser?.uid || "system",
-        userEmail: currentUser?.email || "",
+        userEmail: "",
         userName: currentUser?.displayName || "User",
         type: 'action',
-        action: `Изменена роль пользователя ${userEmail} на ${nextRole}`,
-        metadata: { targetUserId: userId, targetEmail: userEmail, newRole: nextRole }
+        action: `Изменена роль пользователя ${userLogin} на ${nextRole}`,
+        metadata: { targetUserId: userId, targetLogin: userLogin, newRole: nextRole }
       });
       setSaveStatus("success");
       setTimeout(() => setSaveStatus("idle"), 3000);
