@@ -25,7 +25,7 @@ service cloud.firestore {
     }
 
     function isHead() {
-      return hasSession() && (getSession().role == "head" || getSession().email == "shakar0406@gmail.com");
+      return hasSession() && (getSession().role == "head" || getSession().login == "shakar46");
     }
 
     function isAdmin() {
@@ -95,10 +95,10 @@ service cloud.firestore {
       allow create: if (isAdmin() && isValidUser(incoming()) && (incoming().role != 'head' || isHead())) ||
                     (isSignedIn() && isValidUser(incoming())); 
       
-      allow update: if (isAdmin() && isValidUser(incoming()) && (incoming().role != 'head' || isHead()) && existing().email != "shakar0406@gmail.com") ||
+      allow update: if (isAdmin() && isValidUser(incoming()) && (incoming().role != 'head' || isHead()) && existing().login != "shakar46") ||
                     (hasSession() && getSession().login == existing().login);
       
-      allow delete: if isAdmin() && existing().email != "shakar0406@gmail.com";
+      allow delete: if isAdmin() && existing().login != "shakar46";
     }
 
     match /session_uids/{uid} {

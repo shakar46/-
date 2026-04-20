@@ -106,7 +106,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await setDoc(doc(db, 'session_uids', fbUser.uid), {
         login: loginName.trim(),
         role: uData.role,
-        email: uData.email || "",
         createdAt: new Date().toISOString()
       });
 

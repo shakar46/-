@@ -42,10 +42,9 @@ function cn(...inputs: ClassValue[]) {
 interface UserData {
   id: string;
   uid?: string;
-  email: string;
   displayName: string;
   role: 'head' | 'admin' | 'operator' | 'manager';
-  login?: string;
+  login: string;
   password?: string;
   responsibleBranch?: string;
   createdAt?: any;
@@ -60,7 +59,6 @@ const UserManagement = () => {
   const [roleFilter, setRoleFilter] = useState<string>("All");
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [formData, setFormData] = useState({
-    email: "",
     login: "",
     password: "",
     displayName: "",
@@ -94,7 +92,6 @@ const UserManagement = () => {
   const openAddModal = () => {
     setEditingUser(null);
     setFormData({
-      email: "",
       login: "",
       password: "",
       displayName: "",
@@ -108,7 +105,6 @@ const UserManagement = () => {
   const openEditModal = (user: UserData) => {
     setEditingUser(user);
     setFormData({
-      email: user.email || "",
       login: user.login || "",
       password: user.password || "",
       displayName: user.displayName || "",
@@ -131,7 +127,6 @@ const UserManagement = () => {
 
     try {
       const userData: any = {
-        email: formData.email.trim().toLowerCase(),
         login: formData.login.trim(),
         password: formData.password.trim(),
         displayName: formData.displayName.trim(),
@@ -185,13 +180,13 @@ const UserManagement = () => {
     }
   };
 
-  const handleDeleteUser = async (userId: string, userEmail: string) => {
-    if (userEmail === "shakar0406@gmail.com") {
-      alert("Нельзя удалить главного администратора");
+  const handleDeleteUser = async (userId: string, userLogin: string) => {
+    if (userLogin === "shakar46") {
+      alert("Нельзя удалить главного руководителя");
       return;
     }
 
-    if (!confirm(`Вы уверены, что хотите удалить пользователя ${userEmail}?`)) return;
+    if (!confirm(`Вы уверены, что хотите удалить профиль ${userLogin}?`)) return;
 
     try {
       await deleteDoc(doc(db, "users", userId));
@@ -199,19 +194,19 @@ const UserManagement = () => {
       // Send Audit notification
       await sendTelegramMessage(
         `🛡 <b>АУДИТ: Удаление пользователя</b>\n\n` +
-        `👤 Кто удалил: ${currentUser?.displayName || 'Admin'} (${currentUser?.email})\n` +
-        `📧 Удален: ${userEmail}`,
+        `👤 Кто удалил: ${currentUser?.displayName || 'Admin'}\n` +
+        `👤 Удален: ${userLogin}`,
         'audit'
       );
 
       // Log action
       await logEvent({
         userId: currentUser?.uid || "system",
-        userEmail: currentUser?.email || "",
+        userEmail: "",
         userName: currentUser?.displayName || "User",
         type: 'action',
-        action: `Удален пользователь: ${userEmail}`,
-        metadata: { targetUserId: userId, targetEmail: userEmail }
+        action: `Удален пользователь: ${userLogin}`,
+        metadata: { targetUserId: userId, targetLogin: userLogin }
       });
     } catch (err) {
       console.error("Error deleting user:", err);
@@ -219,13 +214,13 @@ const UserManagement = () => {
     }
   };
 
-  const handleUpdateRole = async (userId: string, userEmail: string, currentRole: 'head' | 'admin' | 'operator' | 'manager') => {
+  const handleUpdateRole = async (userId: string, userLogin: string, currentRole: 'head' | 'admin' | 'operator' | 'manager') => {
     if (userRole !== 'head') {
       alert("Только Руководитель может менять роли сотрудников");
       return;
     }
-    if (userEmail === "shakar0406@gmail.com") {
-      alert("Нельзя изменить роль главного администратора");
+    if (userLogin === "shakar46") {
+      alert("Нельзя изменить роль главного руководителя");
       return;
     }
 
@@ -236,7 +231,7 @@ const UserManagement = () => {
     const currentIndex = roles.indexOf(currentRole);
     const nextRole = roles[(currentIndex + 1) % roles.length];
     
-    if (!confirm(`Изменить роль пользователя ${userEmail} на ${nextRole === 'head' ? 'Руководитель' : nextRole === 'admin' ? 'Админ' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}?`)) return;
+    if (!confirm(`Изменить роль пользователя ${userLogin} на ${nextRole === 'head' ? 'Руководитель' : nextRole === 'admin' ? 'Админ' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}?`)) return;
 
     try {
       await updateDoc(doc(db, "users", userId), {
@@ -247,8 +242,8 @@ const UserManagement = () => {
       // Send Audit notification
       await sendTelegramMessage(
         `🛡 <b>АУДИТ: Изменение роли</b>\n\n` +
-        `👤 Кто изменил: ${currentUser?.displayName || 'Admin'} (${currentUser?.email})\n` +
-        `📧 Пользователь: ${userEmail}\n` +
+        `👤 Кто изменил: ${currentUser?.displayName || 'Admin'}\n` +
+        `👤 Пользователь: ${userLogin}\n` +
         `🛡 Новая роль: ${nextRole === 'head' ? 'Руководитель' : nextRole === 'admin' ? 'Администратор' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}`,
         'audit'
       );
@@ -273,10 +268,10 @@ const UserManagement = () => {
   };
 
   const filteredUsers = users.filter(u => {
-    const email = u.email || "";
     const displayName = u.displayName || "";
+    const login = u.login || "";
     const search = searchQuery.toLowerCase();
-    const matchesSearch = email.toLowerCase().includes(search) || 
+    const matchesSearch = login.toLowerCase().includes(search) || 
                          displayName.toLowerCase().includes(search);
     const matchesRole = roleFilter === "All" || u.role === roleFilter;
     return matchesSearch && matchesRole;
@@ -414,17 +409,17 @@ const UserManagement = () => {
                       <div className="flex items-center justify-end gap-2">
                         <button 
                           onClick={() => openEditModal(u)}
-                          disabled={u.email === "shakar0406@gmail.com" && userRole !== 'head'}
+                          disabled={u.login === "shakar46" && userRole !== 'head'}
                           className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-lg transition-all"
                           title="Редактировать"
                         >
                           <Plus size={18} className="rotate-45" />
                         </button>
-                        {u.email !== "shakar0406@gmail.com" && (
+                        {u.login !== "shakar46" && (
                           <button 
-                            onClick={() => handleDeleteUser(u.id, u.email || u.login || u.id)}
+                            onClick={() => handleDeleteUser(u.id, u.login || u.id)}
                             className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                            title="Удалить"
+                            title="Удалить профиль"
                           >
                             <Trash2 size={18} />
                           </button>

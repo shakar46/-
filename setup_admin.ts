@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, doc, setDoc, serverTimestamp, collection, getDocs, deleteDoc } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import fs from "fs";
 
@@ -10,18 +10,25 @@ const auth = getAuth(app);
 
 async function setupAdmin() {
   try {
-    // 1. Sign in anonymously to satisfy security rules (which allow create if isSignedIn)
+    // 1. Sign in anonymously
     await signInAnonymously(auth);
     
-    const login = "crm_head";
-    const password = "CRM_System_2026_Access";
-    const email = "shakar0406@gmail.com";
+    // 2. Delete all existing users
+    console.log("Cleaning up existing users...");
+    const usersSnap = await getDocs(collection(db, "users"));
+    for (const userDoc of usersSnap.docs) {
+      await deleteDoc(doc(db, "users", userDoc.id));
+      console.log(`Deleted user: ${userDoc.id}`);
+    }
+
+    // 3. Create new head user
+    const login = "shakar46";
+    const password = "CRM_Shakar_2026";
     
     const userData = {
-      email: email,
       login: login,
       password: password,
-      displayName: "Главный Руководитель",
+      displayName: "Руководитель",
       role: "head",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -30,11 +37,11 @@ async function setupAdmin() {
     const docId = login.toLowerCase();
     
     await setDoc(doc(db, "users", docId), userData);
-    console.log(`Admin user created/updated!`);
+    console.log(`\nNew Head user created!`);
     console.log(`Login: ${login}`);
     console.log(`Password: ${password}`);
   } catch (error) {
-    console.error("Error creating admin:", error);
+    console.error("Error setting up admin:", error);
   }
   process.exit(0);
 }

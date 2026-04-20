@@ -2,7 +2,7 @@
 
 ## Data Invariants
 1. **User Identity Invariant**: A user can only access the platform if they have a document in the `users` collection with a valid role (`admin` or `operator`).
-2. **Role Immutability**: Users cannot change their own roles. Only `shakar0406@gmail.com` (Super Admin) or existing admins can manage user roles, but no one can demote the Super Admin.
+2. **Role Immutability**: Users cannot change their own roles. Only `shakar46` (Super Admin/Head) or existing admins can manage user roles, but no one can demote the Super Admin.
 3. **Audit Integrity**: Audit logs are append-only. No one can update or delete audit logs.
 4. **Content Management**: Only admins can manage (create/update/delete) Scripts and Learning Base materials. Operators can only read them.
 5. **Appeal Ownership**: Appeals are managed by staff. Deletion is restricted to admins.
@@ -17,7 +17,7 @@
 6. **Learning Base Hijack**: A non-admin user attempting to delete a standard instruction file.
 7. **Identity Spoofing**: Creating an appeal and setting `authorId` to another user's UID.
 8. **Malicious ID**: Attempting to create a document with an extremely long ID (1.5KB) to cause resource exhaustion.
-9. **Super Admin Demotion**: An admin attempting to change the role of `shakar0406@gmail.com`.
+9. **Super Admin Demotion**: An admin attempting to change the role of `shakar46`.
 10. **Private Data Leak**: Attempting to list all `users` without having `admin` role.
 11. **Orphaned Appeal**: Creating an appeal without a valid branch name or required fields.
 12. **Status Shortcut**: Updating an appeal status directly to "Выполнен" without having required intermediate data (atomic check).
