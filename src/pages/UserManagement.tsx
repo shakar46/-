@@ -76,6 +76,12 @@ const UserManagement = () => {
   });
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    show: boolean,
+    type: 'delete' | 'role',
+    user?: UserData,
+    nextRole?: string
+  }>({ show: false, type: 'delete' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
@@ -183,7 +189,28 @@ const UserManagement = () => {
           'audit'
         );
       } else {
-        await updateDoc(doc(db, "users", editingUser.id), userData);
+        // CALL BACKEND API TO UPDATE EMPLOYEE
+        const token = await auth.currentUser?.getIdToken();
+        const response = await fetch("/api/admin/updateEmployee", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            targetUid: editingUser.uid || editingUser.id,
+            name: formData.displayName.trim(),
+            role: formData.role,
+            phone: formData.phone.trim(),
+            branchId: formData.responsibleBranch || null,
+            password: formData.password.trim() !== editingUser.password ? formData.password.trim() : undefined
+          })
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || "Ошибка на сервере");
+        }
         
         await sendTelegramMessage(
           `🛡 <b>АУДИТ: Изменение пользователя</b>\n\n` +
@@ -207,59 +234,62 @@ const UserManagement = () => {
     }
   };
 
-  const handleDeleteUser = async (userId: string, userLogin: string) => {
-    if (userLogin === "shakar46") {
+  const handleDeleteUser = async () => {
+    const userToDel = confirmModal.user;
+    if (!userToDel) return;
+
+    if (userToDel.login === "shakar46") {
       alert("Нельзя удалить главного руководителя");
+      setConfirmModal({ show: false, type: 'delete' });
       return;
     }
 
-    if (!confirm(`Вы уверены, что хотите удалить профиль ${userLogin}?`)) return;
-
+    setIsSubmitting(true);
     try {
-      await deleteDoc(doc(db, "users", userId));
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch("/api/admin/deleteUser", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ targetUid: userToDel.uid || userToDel.id })
+      });
+
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
       
       // Send Audit notification
       await sendTelegramMessage(
         `🛡 <b>АУДИТ: Удаление пользователя</b>\n\n` +
         `👤 Кто удалил: ${currentUser?.displayName || 'Admin'}\n` +
-        `👤 Удален: ${userLogin}`,
+        `👤 Удален: ${userToDel.login}`,
         'audit'
       );
 
-      // Log action
-      await logEvent({
-        userId: currentUser?.uid || "system",
-        userEmail: "",
-        userName: currentUser?.displayName || "User",
-        type: 'action',
-        action: `Удален пользователь: ${userLogin}`,
-        metadata: { targetUserId: userId, targetLogin: userLogin }
-      });
-    } catch (err) {
+      setSaveStatus("success");
+      setConfirmModal({ show: false, type: 'delete' });
+    } catch (err: any) {
       console.error("Error deleting user:", err);
-      alert("Ошибка при удалении пользователя");
+      setError(err.message || "Ошибка при удалении пользователя");
+      setSaveStatus("error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleUpdateRole = async (userId: string, userLogin: string, currentRole: 'head' | 'admin' | 'operator' | 'manager' | 'viewer') => {
-    if (userRole !== 'head') {
-      alert("Только Руководитель может менять роли сотрудников");
-      return;
-    }
-    if (userLogin === "shakar46") {
+  const handleUpdateRole = async () => {
+    const userToUpdate = confirmModal.user;
+    const nextRole = confirmModal.nextRole;
+    if (!userToUpdate || !nextRole) return;
+
+    if (userToUpdate.login === "shakar46") {
       alert("Нельзя изменить роль главного руководителя");
+      setConfirmModal({ show: false, type: 'role' });
       return;
     }
 
-    const roles: ('head' | 'admin' | 'operator' | 'manager' | 'viewer')[] = userRole === 'head' 
-      ? ['viewer', 'operator', 'manager', 'admin', 'head']
-      : ['viewer', 'operator', 'manager', 'admin'];
-      
-    const currentIndex = roles.indexOf(currentRole);
-    const nextRole = roles[(currentIndex + 1) % roles.length];
-    
-    if (!confirm(`Изменить роль пользователя ${userLogin} на ${nextRole === 'head' ? 'Руководитель' : nextRole === 'admin' ? 'Админ' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}?`)) return;
-
+    setIsSubmitting(true);
     try {
       const token = await auth.currentUser?.getIdToken();
       const response = await fetch("/api/admin/setUserRole", {
@@ -269,7 +299,7 @@ const UserManagement = () => {
           "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
-          targetUid: userId,
+          targetUid: userToUpdate.uid || userToUpdate.id,
           role: nextRole
         })
       });
@@ -281,28 +311,37 @@ const UserManagement = () => {
       await sendTelegramMessage(
         `🛡 <b>АУДИТ: Изменение роли</b>\n\n` +
         `👤 Кто изменил: ${currentUser?.displayName || 'Admin'}\n` +
-        `👤 Пользователь: ${userLogin}\n` +
+        `👤 Пользователь: ${userToUpdate.login}\n` +
         `🛡 Новая роль: ${nextRole === 'head' ? 'Руководитель' : nextRole === 'admin' ? 'Администратор' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}`,
         'audit'
       );
 
-      // Log action
-      await logEvent({
-        userId: currentUser?.uid || "system",
-        userEmail: "",
-        userName: currentUser?.displayName || "User",
-        type: 'action',
-        action: `Изменена роль пользователя ${userLogin} на ${nextRole}`,
-        metadata: { targetUserId: userId, targetLogin: userLogin, newRole: nextRole }
-      });
       setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 3000);
-    } catch (err) {
+      setConfirmModal({ show: false, type: 'role' });
+    } catch (err: any) {
       console.error("Error updating role:", err);
-      alert("Ошибка при изменении роли");
+      setError(err.message || "Ошибка при изменении роли");
       setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const prepareUpdateRole = (user: UserData) => {
+    if (userRole !== 'head' && userRole !== 'admin') {
+      alert("Только Руководитель или Администратор может менять роли сотрудников");
+      return;
+    }
+    const roles: ('head' | 'admin' | 'operator' | 'manager' | 'viewer')[] = ['viewer', 'operator', 'manager', 'admin', 'head'];
+    const currentIndex = roles.indexOf(user.role);
+    const nextRole = roles[(currentIndex + 1) % roles.length];
+    
+    setConfirmModal({
+      show: true,
+      type: 'role',
+      user: user,
+      nextRole: nextRole
+    });
   };
 
   const filteredUsers = users.filter(u => {
@@ -438,7 +477,7 @@ const UserManagement = () => {
                     </td>
                     <td className="px-8 py-5">
                       <span className="text-sm text-zinc-500 italic">
-                        {u.responsibleBranch || (u.role === 'manager' ? 'Все филиалы' : '—')}
+                        {u.responsibleBranch || '—'}
                       </span>
                     </td>
                     <td className="px-8 py-5 text-sm text-zinc-500">
@@ -479,7 +518,7 @@ const UserManagement = () => {
                                   {u.login !== "shakar46" && (
                                     <button 
                                       onClick={() => {
-                                        handleDeleteUser(u.id, u.login || u.id);
+                                        setConfirmModal({ show: true, type: 'delete', user: u });
                                         setActiveMenuId(null);
                                       }}
                                       className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 transition-all"
@@ -490,7 +529,7 @@ const UserManagement = () => {
                                   )}
                                   <button 
                                     onClick={() => {
-                                      handleUpdateRole(u.id, u.login || u.id, u.role);
+                                      prepareUpdateRole(u);
                                       setActiveMenuId(null);
                                     }}
                                     className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-zinc-600 hover:bg-zinc-50 transition-all"
@@ -689,7 +728,7 @@ const UserManagement = () => {
                       onChange={(e) => setFormData({ ...formData, responsibleBranch: e.target.value })}
                       className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none transition-all"
                     >
-                      <option value="">Все филиалы</option>
+                      <option value="" disabled>Выберите филиал</option>
                       {BRANCH_NAMES.map(branch => (
                         <option key={branch} value={branch}>{branch}</option>
                       ))}
@@ -731,6 +770,68 @@ const UserManagement = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation Modals */}
+      <AnimatePresence>
+        {confirmModal.show && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl p-10 text-center"
+            >
+              <div className={cn(
+                "w-20 h-20 mx-auto rounded-3xl flex items-center justify-center mb-6",
+                confirmModal.type === 'delete' ? "bg-rose-100 text-rose-600" : "bg-indigo-100 text-indigo-600"
+              )}>
+                {confirmModal.type === 'delete' ? <Trash2 size={40} /> : <Shield size={40} />}
+              </div>
+              
+              <h3 className="text-2xl font-black mb-4">
+                {confirmModal.type === 'delete' ? "Удалить пользователя?" : "Изменить роль?"}
+              </h3>
+              
+              <p className="text-zinc-500 mb-8 font-medium">
+                {confirmModal.type === 'delete' 
+                  ? `Вы уверены, что хотите навсегда удалить профиль сотрудника ${confirmModal.user?.login}? Это действие необратимо.`
+                  : `Вы подтверждаете изменение роли для ${confirmModal.user?.login} на "${
+                      confirmModal.nextRole === 'head' ? 'Руководитель' : 
+                      confirmModal.nextRole === 'admin' ? 'Админ' : 
+                      confirmModal.nextRole === 'manager' ? 'Менеджер' : 'Оператор'
+                    }"?`
+                }
+              </p>
+
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+                  className="flex-1 py-4 bg-zinc-100 text-zinc-500 rounded-2xl font-bold hover:bg-zinc-200 transition-all font-sans"
+                >
+                  Отмена
+                </button>
+                <button 
+                  onClick={confirmModal.type === 'delete' ? handleDeleteUser : handleUpdateRole}
+                  disabled={isSubmitting}
+                  className={cn(
+                    "flex-2 py-4 rounded-2xl font-black text-white shadow-xl transition-all flex items-center justify-center gap-2 font-sans",
+                    confirmModal.type === 'delete' ? "bg-rose-600 shadow-rose-600/20" : "bg-indigo-600 shadow-indigo-600/20"
+                  )}
+                >
+                  {isSubmitting ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "Подтверждаю"}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

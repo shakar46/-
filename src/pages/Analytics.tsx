@@ -140,6 +140,7 @@ const COLORS = ['#000000', '#3f3f46', '#71717a', '#a1a1aa', '#d4d4d8', '#e4e4e7'
 export default function Analytics() {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<any[]>([]);
+  const [actions, setActions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<"day" | "week" | "month" | "year" | "custom">("month");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
@@ -159,15 +160,26 @@ export default function Analytics() {
   useEffect(() => {
     const fetchRequests = async () => {
       try {
-        let q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
-        const querySnapshot = await getDocs(q);
-        let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const requestsQ = query(collection(db, "requests"), orderBy("createdAt", "desc"));
+        const actionsQ = query(collection(db, "request_actions"), orderBy("createdAt", "desc"));
+        
+        const [requestsSnapshot, actionsSnapshot] = await Promise.all([
+          getDocs(requestsQ),
+          getDocs(actionsQ)
+        ]);
+
+        let requestsData = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        let actionsData = actionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
         if (userRole === 'manager' && userData?.branchId) {
-          data = data.filter((r: any) => r.branchId === userData.branchId);
+          requestsData = requestsData.filter((r: any) => r.branchId === userData.branchId);
+          // Filter actions to only those belonging to the filtered requests
+          const requestIds = new Set(requestsData.map((r: any) => r.id));
+          actionsData = actionsData.filter((a: any) => requestIds.has(a.requestId));
         }
         
-        setRequests(data);
+        setRequests(requestsData);
+        setActions(actionsData);
       } catch (error) {
         handleFirestoreError(error, OperationType.LIST, "requests");
       }
@@ -528,13 +540,44 @@ export default function Analytics() {
   }, [filteredRequests, period, startDate, endDate]);
 
   // Data for Request Status Chart
-  const requestStatusData = React.useMemo(() => Object.entries(
-    filteredRequests.reduce((acc: any, curr) => {
+  const requestStatusData = React.useMemo(() => {
+    const counts = filteredRequests.reduce((acc: any, curr) => {
       const status = curr.status || "in_progress";
       acc[status] = (acc[status] || 0) + 1;
       return acc;
-    }, {})
-  ).map(([name, value]) => ({ name, value: value as number })), [filteredRequests]);
+    }, {});
+
+    return Object.entries(counts).map(([name, value]) => {
+      let label = name;
+      if (name === "in_progress") label = "В работе";
+      else if (name === "done") label = "Выполнено";
+      else if (name === "new") label = "Новый";
+      else if (name === "cancelled") label = "Отменен";
+
+      return { 
+        name: label, 
+        value: value as number,
+        originalStatus: name
+      };
+    });
+  }, [filteredRequests]);
+
+  // Data for Manager Feedback Chart
+  const feedbackData = React.useMemo(() => {
+    const doneRequests = filteredRequests.filter(r => r.status === 'done');
+    const feedbackCounts: Record<string, number> = {};
+    
+    doneRequests.forEach(req => {
+      // Find the resolution for this request from actions
+      const requestAction = actions.find(a => a.requestId === req.id);
+      const feedback = requestAction?.resolution || "Нет отзыва";
+      feedbackCounts[feedback] = (feedbackCounts[feedback] || 0) + 1;
+    });
+
+    return Object.entries(feedbackCounts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredRequests, actions]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin" /></div>;
@@ -767,6 +810,12 @@ export default function Analytics() {
           icon={Check} 
           color="text-emerald-500"
         />
+        <StatCard 
+          title="Новые" 
+          value={filteredRequests.filter(r => r.status === 'new' || !r.status).length} 
+          icon={Plus} 
+          color="text-blue-500"
+        />
       </div>
 
       {/* Kanban Board Visualization */}
@@ -982,15 +1031,22 @@ export default function Analytics() {
                     outerRadius={100}
                     paddingAngle={5}
                     dataKey="value"
-                    onClick={(data) => navigate(`/analytics/status?value=${data.name}${getDateParams()}`)}
+                    onClick={(data: any) => {
+                      if (data && data.payload && data.payload.originalStatus) {
+                        navigate(`/analytics/status?value=${data.payload.originalStatus}${getDateParams()}`);
+                      } else if (data && data.originalStatus) {
+                        navigate(`/analytics/status?value=${data.originalStatus}${getDateParams()}`);
+                      }
+                    }}
                     style={{ cursor: 'pointer' }}
                   >
                     {requestStatusData.map((entry, index) => (
                       <Cell 
                         key={`cell-${index}`} 
                         fill={
-                          entry.name === "done" ? "#10b981" : 
-                          entry.name === "in_progress" ? "#f59e0b" : 
+                          entry.originalStatus === "done" ? "#10b981" : 
+                          entry.originalStatus === "in_progress" ? "#f59e0b" : 
+                          entry.originalStatus === "new" ? "#3b82f6" :
                           "#94a3b8"
                         } 
                       />
@@ -998,11 +1054,47 @@ export default function Analytics() {
                   </Pie>
                   <Tooltip 
                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                    formatter={(value, name) => [value, name === "done" ? "Выполнено" : name === "in_progress" ? "В работе" : name]}
                   />
                   <Legend verticalAlign="bottom" height={36} iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Manager Feedback Statistics */}
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm col-span-full">
+            <ChartHeader title="Количество решенных запросов по отзывам менеджеров" onExport={() => exportSectionToExcel(filteredRequests.filter(r => r.status === 'done'), "Решения_по_отзывам")} />
+            <div className="h-[400px] w-full">
+              {feedbackData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    layout="vertical"
+                    data={feedbackData}
+                    margin={{ left: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f4f4f5" />
+                    <XAxis type="number" hide />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fill: '#71717a' }} 
+                      width={150} 
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f8f9fa' }}
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    />
+                    <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={24} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-zinc-400 space-y-2">
+                  <MessageSquare size={48} className="opacity-20" />
+                  <p className="text-sm font-medium">Нет данных о решенных запросах с отзывами</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

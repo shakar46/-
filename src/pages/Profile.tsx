@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { User, Lock, Save, Shield, Key, AlertCircle, CheckCircle, Camera, History, Calendar, Smartphone, Globe, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useFirebase } from "../components/FirebaseProvider";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import { doc, updateDoc, getDocs, collection, query, where, deleteDoc, setDoc, orderBy, limit } from "firebase/firestore";
 import { cn } from "../lib/utils";
 import { logEvent } from "../utils/logger";
@@ -25,37 +25,74 @@ export const Profile = () => {
   const [changeHistory, setChangeHistory] = useState<any[]>([]);
   const [actionHistory, setActionHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState({
+    from: "",
+    to: ""
+  });
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showPasswords, setShowPasswords] = useState({
+    old: false,
+    new: false,
+    confirm: false
+  });
   const [passwordForm, setPasswordForm] = useState({
     oldPassword: "",
     newPassword: "",
     confirmPassword: ""
   });
 
-  useEffect(() => {
-    const fetchHistory = async () => {
-      if (!userData?.uid) return;
-      try {
-        const q = query(
-          collection(db, "audit_logs"),
-          where("userId", "==", userData.uid),
-          orderBy("createdAt", "desc"),
-          limit(50)
-        );
-        const snapshot = await getDocs(q);
-        const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        setChangeHistory(logs.filter((log: any) => log.action?.includes('Обновление') || log.action?.includes('Изменен')));
-        setActionHistory(logs.filter((log: any) => log.action?.includes('вход') || log.action?.includes('Создан')));
-      } catch (err) {
-        console.error("Fetch history error:", err);
-      } finally {
-        setHistoryLoading(false);
+  const fetchHistory = async () => {
+    if (!userData?.uid) return;
+    setHistoryLoading(true);
+    try {
+      let q = query(
+        collection(db, "audit_logs"),
+        where("userId", "==", userData.uid),
+        orderBy("createdAt", "desc"),
+        limit(100)
+      );
+
+      const snapshot = await getDocs(q);
+      let logs = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        createdAt: (doc.data() as any).createdAt?.toDate() || new Date()
+      }));
+      
+      // Apply manual filter for dates
+      if (dateFilter.from) {
+        const fromDate = new Date(dateFilter.from);
+        logs = logs.filter(l => l.createdAt >= fromDate);
       }
-    };
+      if (dateFilter.to) {
+        const toDate = new Date(dateFilter.to);
+        toDate.setHours(23, 59, 59, 999);
+        logs = logs.filter(l => l.createdAt <= toDate);
+      }
+
+      setChangeHistory(logs.filter((log: any) => 
+        log.action?.includes('Обновление') || 
+        log.action?.includes('Изменен') || 
+        log.entityType === 'User'
+      ));
+      
+      setActionHistory(logs.filter((log: any) => 
+        log.action?.includes('вход') || 
+        log.action?.includes('Создан') || 
+        log.action?.includes('Смена пароля') ||
+        log.entityType === 'Auth'
+      ));
+    } catch (err) {
+      console.error("Fetch history error:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchHistory();
-  }, [userData?.uid]);
+  }, [userData?.uid, dateFilter]);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -74,40 +111,39 @@ export const Profile = () => {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert("Пароли не совпадают");
+    setError(null);
+
+    if (passwordForm.newPassword.length < 6) {
+      setError("Минимальная длина пароля - 6 символов");
       return;
     }
-    if (passwordForm.oldPassword !== userData?.password) {
-      alert("Неверный старый пароль");
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setError("Пароли не совпадают");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const docId = userData?.login?.toLowerCase().replace(/\s+/g, '_');
-      if (!docId) throw new Error("ID пользователя не найден");
-      
-      await updateDoc(doc(db, "users", docId), {
-        password: passwordForm.newPassword,
-        updatedAt: new Date().toISOString()
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch("/api/profile/changePassword", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          oldPassword: passwordForm.oldPassword,
+          newPassword: passwordForm.newPassword
+        })
       });
 
-      await logEvent({
-        userId: user?.uid || userData?.id || "unknown",
-        userEmail: "",
-        userName: userData?.displayName || "User",
-        login: userData?.login,
-        type: 'change',
-        action: 'Изменен пароль',
-        metadata: { login: userData?.login }
-      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || "Не удалось сменить пароль");
 
-      alert("Пароль успешно изменен");
-      setShowPasswordModal(false);
-      setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
+      alert("Пароль успешно изменен. Пожалуйста, войдите в систему с новым паролем.");
+      logout();
     } catch (err: any) {
-      alert("Ошибка: " + err.message);
+       setError(err.message || "Ошибка при смене пароля");
     } finally {
       setIsSubmitting(false);
     }
@@ -138,8 +174,6 @@ export const Profile = () => {
       if (!result.success) throw new Error(result.error);
 
       setSuccess(true);
-      // Reload is handled by the auth state change in FirebaseProvider usually,
-      // but we might need a manual refresh or just wait for the provider to sync.
     } catch (err: any) {
       setError(err.message || "Ошибка при обновлении");
     } finally {
@@ -214,9 +248,9 @@ export const Profile = () => {
                     <label className="block text-xs font-black text-zinc-400 uppercase tracking-widest mb-2 ml-1">Логин</label>
                     <input 
                       type="text"
+                      disabled
                       value={formData.login}
-                      onChange={(e) => setFormData({ ...formData, login: e.target.value })}
-                      className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
+                      className="w-full px-5 py-4 bg-zinc-100 border border-zinc-200 rounded-2xl outline-none font-bold text-zinc-500 cursor-not-allowed"
                     />
                   </div>
                   <div>
@@ -276,7 +310,7 @@ export const Profile = () => {
                     <div key={log.id} className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                          {log.timestamp?.toDate() ? log.timestamp.toDate().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {log.createdAt ? log.createdAt.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
                         </span>
                         <div className="flex items-center gap-1">
                           <Smartphone size={10} className="text-zinc-300" />
@@ -306,7 +340,7 @@ export const Profile = () => {
                     <div key={log.id} className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                          {log.timestamp?.toDate() ? log.timestamp.toDate().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {log.createdAt ? log.createdAt.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
                         </span>
                       </div>
                       <p className="text-xs font-bold text-zinc-800">{log.action}</p>
@@ -321,23 +355,56 @@ export const Profile = () => {
 
         {/* Info Sidebar */}
         <div className="space-y-8">
-           <div className="bg-zinc-900 text-white p-8 rounded-[2.5rem] shadow-xl">
-             <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6">
-                <Shield size={24} className="text-white" />
+           <div className="bg-[#AAF0D1] text-zinc-900 p-8 rounded-[2.5rem] shadow-xl">
+             <div className="w-12 h-12 bg-white/40 rounded-2xl flex items-center justify-center mb-6">
+                <Shield size={24} className="text-zinc-900" />
              </div>
              <h4 className="text-xl font-black mb-2">Статус аккаунта</h4>
-             <p className="text-zinc-400 text-sm mb-6">Разрешения и доступы вашей учетной записи</p>
+             <p className="text-zinc-700 text-sm mb-6">Разрешения и доступы вашей учетной записи</p>
              
              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl">
-                   <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Роль</span>
+                <div className="flex items-center justify-between p-4 bg-white/30 rounded-2xl">
+                   <span className="text-xs font-bold text-zinc-600 uppercase tracking-widest">Роль</span>
                    <span className="text-xs font-black uppercase">{userData?.role === 'head' ? 'Руководитель' : userData?.role === 'admin' ? 'Админ' : 'Сотрудник'}</span>
                 </div>
-                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl">
-                   <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Филиал</span>
-                   <span className="text-xs font-black uppercase">{userData?.responsibleBranch || 'Все'}</span>
+                <div className="flex items-center justify-between p-4 bg-white/30 rounded-2xl">
+                   <span className="text-xs font-bold text-zinc-600 uppercase tracking-widest">Филиал</span>
+                   <span className="text-xs font-black uppercase tracking-tight">{userData?.responsibleBranch || 'Все'}</span>
                 </div>
              </div>
+           </div>
+
+           <div className="bg-white p-8 rounded-[2.5rem] border border-zinc-200 shadow-sm">
+              <h5 className="font-black text-lg mb-6 flex items-center gap-2">
+                <Calendar size={20} className="text-zinc-400" />
+                Фильтр по дате
+              </h5>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1 ml-1">От</label>
+                  <input 
+                    type="date"
+                    value={dateFilter.from}
+                    onChange={(e) => setDateFilter({ ...dateFilter, from: e.target.value })}
+                    className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl font-bold text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1 ml-1">До</label>
+                  <input 
+                    type="date"
+                    value={dateFilter.to}
+                    onChange={(e) => setDateFilter({ ...dateFilter, to: e.target.value })}
+                    className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl font-bold text-sm"
+                  />
+                </div>
+                <button 
+                  onClick={() => setDateFilter({ from: "", to: "" })}
+                  className="w-full py-2 text-xs font-bold text-zinc-400 hover:text-zinc-900 transition-colors"
+                >
+                  Сбросить фильтры
+                </button>
+              </div>
            </div>
 
            <div className="bg-emerald-50 border border-emerald-100 p-8 rounded-[2.5rem]">
@@ -369,44 +436,82 @@ export const Profile = () => {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl p-10"
             >
-              <h3 className="text-2xl font-black mb-8 flex items-center gap-3">
+              <h3 className="text-2xl font-black mb-4 flex items-center gap-3">
                 <Lock className="text-zinc-400" />
                 Смена пароля
               </h3>
+              {error && (
+                <div className="mb-6 p-4 bg-rose-50 text-rose-600 rounded-2xl text-xs font-bold flex items-center gap-2 border border-rose-100 italic">
+                  <AlertCircle size={16} /> {error}
+                </div>
+              )}
               <form onSubmit={handleChangePassword} className="space-y-6">
                 <div>
                   <label className="block text-xs font-black text-zinc-400 uppercase tracking-widest mb-2">Старый пароль</label>
-                  <input 
-                    type="password"
-                    required
-                    value={passwordForm.oldPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })}
-                    className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
-                  />
+                  <div className="relative">
+                    <input 
+                      type={showPasswords.old ? "text" : "password"}
+                      required
+                      value={passwordForm.oldPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })}
+                      className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPasswords(prev => ({ ...prev, old: !prev.old }))}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-black transition-colors"
+                    >
+                      {showPasswords.old ? <Globe size={18} /> : <Key size={18} />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-black text-zinc-400 uppercase tracking-widest mb-2">Новый пароль</label>
-                  <input 
-                    type="password"
-                    required
-                    value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
-                  />
+                  <div className="relative">
+                    <input 
+                      type={showPasswords.new ? "text" : "password"}
+                      required
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                      className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-black transition-colors"
+                    >
+                      {showPasswords.new ? <Globe size={18} /> : <Key size={18} />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-black text-zinc-400 uppercase tracking-widest mb-2">Подтвердите пароль</label>
-                  <input 
-                    type="password"
-                    required
-                    value={passwordForm.confirmPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                    className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
-                  />
+                  <div className="relative">
+                    <input 
+                      type={showPasswords.confirm ? "text" : "password"}
+                      required
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                      className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-black transition-colors"
+                    >
+                      {showPasswords.confirm ? <Globe size={18} /> : <Key size={18} />}
+                    </button>
+                  </div>
                 </div>
                 <div className="flex gap-4 pt-4">
-                  <button type="button" onClick={() => setShowPasswordModal(false)} className="flex-1 py-4 font-bold text-zinc-400 hover:bg-zinc-50 rounded-2xl transition-all">Отмена</button>
-                  <button type="submit" className="flex-2 bg-black text-white py-4 px-8 rounded-2xl font-black hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-black/10">Обновить пароль</button>
+                  <button type="button" onClick={() => setShowPasswordModal(false)} className="flex-1 py-4 font-bold text-zinc-400 hover:bg-zinc-50 rounded-2xl transition-all font-sans">Отмена</button>
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className="flex-2 bg-black text-white py-4 px-8 rounded-2xl font-black hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-black/10 flex items-center justify-center font-sans tracking-tight"
+                  >
+                    {isSubmitting ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "Обновить пароль"}
+                  </button>
                 </div>
               </form>
             </motion.div>

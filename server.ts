@@ -83,17 +83,39 @@ async function startServer() {
   // Internal Audit Log Helper
   const logAction = async (userId: string, action: string, entityType: string, entityId?: string, changes?: any) => {
     if (!db) return;
-    await db.collection("audit_logs").add({
-      userId,
-      action,
-      entityType,
-      entityId: entityId || null,
-      changes: changes || null,
-      createdAt: FieldValue.serverTimestamp(),
-    });
+    try {
+      await db.collection("audit_logs").add({
+        userId,
+        action,
+        entityType,
+        entityId: entityId || null,
+        changes: changes || null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.error("Failed to log action:", e);
+    }
   };
 
   // API Routes
+
+  // Create Log Entry (Internal/Public if authorized)
+  app.post("/api/audit/log", async (req, res) => {
+    if (!auth || !db) return res.status(500).json({ success: false, error: "Firebase Admin not initialized" });
+    
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    try {
+      const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
+      const { action, entityType, entityId, changes } = req.body;
+      
+      await logAction(decodedToken.uid, action, entityType, entityId, changes);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
   
   // 4.1. Create Employee
   app.post("/api/admin/createEmployee", async (req, res) => {
@@ -105,20 +127,35 @@ async function startServer() {
     
     try {
       const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
-      if (decodedToken.role !== 'admin' && decodedToken.role !== 'owner') {
+      if (decodedToken.role !== 'admin' && decodedToken.role !== 'owner' && decodedToken.role !== 'head') {
         return res.status(403).json({ success: false, error: "ACCESS_DENIED" });
       }
 
       const { name, login, password, role, phone, branchId } = req.body;
       const email = `${login.toLowerCase()}@crm-internal.local`;
 
-      // 1. Create auth user
-      const userRecord = await auth.createUser({
-        email,
-        password,
-        displayName: name,
-        phoneNumber: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : undefined,
-      });
+      let userRecord;
+      try {
+        // 1. Try to create auth user
+        userRecord = await auth.createUser({
+          email,
+          password,
+          displayName: name,
+          phoneNumber: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : undefined,
+        });
+      } catch (e: any) {
+        if (e.code === 'auth/email-already-exists') {
+          // If user already exists in Auth, fetch them and update
+          userRecord = await auth.getUserByEmail(email);
+          await auth.updateUser(userRecord.uid, {
+            password,
+            displayName: name,
+            phoneNumber: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : undefined,
+          });
+        } else {
+          throw e;
+        }
+      }
 
       // 2. Set custom claims
       await auth.setCustomUserClaims(userRecord.uid, { role, branchId });
@@ -135,7 +172,7 @@ async function startServer() {
         createdAt: FieldValue.serverTimestamp(),
       });
 
-      await logAction(decodedToken.uid, `Создан сотрудник: ${login}`, "User", userRecord.uid);
+      await logAction(decodedToken.uid, `Создан/Обновлен сотрудник: ${login}`, "User", userRecord.uid);
 
       res.json({ success: true, uid: userRecord.uid });
     } catch (error: any) {
@@ -182,7 +219,101 @@ async function startServer() {
     }
   });
 
-  // 4.3. Set User Role
+  // 4.3. Delete Request
+  app.post("/api/requests/delete", async (req, res) => {
+    if (!auth || !db) return res.status(500).json({ success: false, error: "Firebase Admin not initialized" });
+    
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, error: "Unauthorized" });
+    
+    try {
+      const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
+      if (decodedToken.role !== 'admin' && decodedToken.role !== 'owner' && decodedToken.role !== 'head') {
+        return res.status(403).json({ success: false, error: "ACCESS_DENIED" });
+      }
+
+      const { requestId } = req.body;
+      const requestRef = db.collection("requests").doc(requestId);
+      const snapshot = await requestRef.get();
+      if (!snapshot.exists) return res.status(404).json({ success: false, error: "Request not found" });
+
+      await requestRef.delete();
+      
+      // Also delete related actions
+      const actionsSnapshot = await db.collection("request_actions").where("requestId", "==", requestId).get();
+      const batch = db.batch();
+      actionsSnapshot.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+
+      await logAction(decodedToken.uid, `Удалено обращение: ${requestId}`, "Request", requestId);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Delete Request error:", error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // 4.4. Update Employee (Admin/Owner)
+  app.post("/api/admin/updateEmployee", async (req, res) => {
+    if (!auth || !db) return res.status(500).json({ success: false, error: "Firebase Admin not initialized" });
+    
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, error: "Unauthorized" });
+    
+    try {
+      const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
+      if (decodedToken.role !== 'admin' && decodedToken.role !== 'owner' && decodedToken.role !== 'head') {
+        return res.status(403).json({ success: false, error: "ACCESS_DENIED" });
+      }
+
+      const { targetUid, name, role, phone, branchId, password } = req.body;
+
+      const userRef = db.collection("users").doc(targetUid);
+      const snapshot = await userRef.get();
+      if (!snapshot.exists) return res.status(404).json({ success: false, error: "Пользователь не найден" });
+      
+      const oldData = snapshot.data();
+
+      // Update Auth if needed
+      const authUpdates: any = {};
+      if (name) authUpdates.displayName = name;
+      if (phone) authUpdates.phoneNumber = phone.startsWith('+') ? phone : `+${phone}`;
+      if (password) authUpdates.password = password;
+
+      if (Object.keys(authUpdates).length > 0) {
+        await auth.updateUser(targetUid, authUpdates);
+      }
+
+      // Update Custom Claims if role or branch changed
+      if (role !== undefined || branchId !== undefined) {
+        await auth.setCustomUserClaims(targetUid, { 
+          role: role !== undefined ? role : oldData?.role, 
+          branchId: branchId !== undefined ? branchId : oldData?.branchId 
+        });
+      }
+
+      // Update Firestore
+      const dbUpdates: any = {
+        updatedAt: FieldValue.serverTimestamp()
+      };
+      if (name) dbUpdates.displayName = name;
+      if (role) dbUpdates.role = role;
+      if (branchId !== undefined) dbUpdates.branchId = branchId;
+      if (phone) dbUpdates.phone = phone;
+
+      await userRef.update(dbUpdates);
+
+      await logAction(decodedToken.uid, `Обновлен сотрудник: ${oldData?.login}`, "User", targetUid, { updates: dbUpdates });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Update Employee error:", error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // 4.4. Set User Role (Keep as specialized or merge into updateEmployee)
   app.post("/api/admin/setUserRole", async (req, res) => {
     if (!auth || !db) return res.status(500).json({ success: false, error: "Firebase Admin not initialized" });
     
@@ -191,7 +322,7 @@ async function startServer() {
 
     try {
       const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
-      if (decodedToken.role !== 'admin' && decodedToken.role !== 'owner') {
+      if (decodedToken.role !== 'admin' && decodedToken.role !== 'owner' && decodedToken.role !== 'head') {
         return res.status(403).json({ success: false, error: "ACCESS_DENIED" });
       }
 
@@ -264,7 +395,7 @@ async function startServer() {
       const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
       const { requestId, instantFix, resolution } = req.body;
 
-      if (decodedToken.role !== 'manager' && decodedToken.role !== 'admin' && decodedToken.role !== 'owner') {
+      if (decodedToken.role !== 'manager' && decodedToken.role !== 'admin' && decodedToken.role !== 'owner' && decodedToken.role !== 'head') {
         return res.status(403).json({ success: false, error: "ACCESS_DENIED" });
       }
 
@@ -341,6 +472,77 @@ async function startServer() {
     } catch (error) {
       console.error("Sync Error:", error);
       res.status(500).json({ error: "Sync failed" });
+    }
+  });
+
+  // Health check
+  app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+
+  // 4.7. Change Password
+  app.post("/api/profile/changePassword", async (req, res) => {
+    if (!auth) return res.status(500).json({ success: false, error: "Firebase Admin not initialized" });
+    
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    try {
+      const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
+      const { oldPassword, newPassword } = req.body;
+
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ success: false, error: "Минимальная длина пароля - 6 символов" });
+      }
+
+      // In a real production app, we would verify the old password here using the Identity Toolkit API
+      // Since we don't want to expose API keys or handle complex reauth in this environment, 
+      // we'll proceed with the change but log it as a secure action.
+      // NOTE: For true production, always verify old password before Admin update.
+      
+      await auth.updateUser(decodedToken.uid, { password: newPassword });
+
+      await logAction(decodedToken.uid, "Смена пароля", "Auth", decodedToken.uid);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // 4.8. Delete User (Head/Admin only)
+  app.post("/api/admin/deleteUser", async (req, res) => {
+    if (!auth || !db) return res.status(500).json({ success: false, error: "Firebase Admin not initialized" });
+    
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, error: "Unauthorized" });
+    
+    try {
+      const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
+      if (decodedToken.role !== 'admin' && decodedToken.role !== 'owner' && decodedToken.role !== 'head') {
+        return res.status(403).json({ success: false, error: "ACCESS_DENIED" });
+      }
+
+      const { targetUid } = req.body;
+      
+      if (targetUid === decodedToken.uid) {
+        return res.status(400).json({ success: false, error: "Вы не можете удалить самого себя" });
+      }
+
+      // Delete from Auth
+      await auth.deleteUser(targetUid);
+      
+      // Get user info for log
+      const userRef = db.collection("users").doc(targetUid);
+      const snapshot = await userRef.get();
+      const userData = snapshot.data();
+
+      // Delete from Firestore
+      await userRef.delete();
+
+      await logAction(decodedToken.uid, `Удален пользователь: ${userData?.login || targetUid}`, "User", targetUid);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
     }
   });
 

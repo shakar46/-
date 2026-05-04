@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { collection, query, getDocs, orderBy, where, limit, deleteDoc, doc } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { 
   Search, 
@@ -74,11 +74,23 @@ export default function Requests() {
 
   const handleDelete = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "requests", id));
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch("/api/requests/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ requestId: id })
+      });
+
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+
       setRequests(requests.filter(r => r.id !== id));
       setDeleteConfirmId(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `requests/${id}`);
+    } catch (error: any) {
+      alert("Ошибка при удалении: " + error.message);
     }
   };
 

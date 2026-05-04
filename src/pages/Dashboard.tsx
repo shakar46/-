@@ -35,7 +35,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const todayStart = startOfDay(new Date()).toISOString();
+        const todayStart = startOfDay(new Date());
 
         // Fetch only today's requests for the list and stats
         const q = query(
@@ -71,10 +71,10 @@ export default function Dashboard() {
 
         setStats({
           total: todayRequests.length,
-          new: todayRequests.filter(r => r.status === "in_progress").length,
-          inWork: todayRequests.filter(r => r.managerId).length, // simplified logic
+          new: todayRequests.filter(r => r.status === "new" || !r.status).length,
+          inWork: todayRequests.filter(r => r.status === "in_progress").length,
           completed: todayRequests.filter(r => r.status === "done").length,
-          recentAppeals: recent, // keeping variable names for now to minimize JSX changes
+          recentAppeals: recent,
           topBranches
         });
       } catch (error) {

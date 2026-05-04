@@ -115,16 +115,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: "/requests", icon: MessageSquare, label: "Запросы" },
   ];
 
-  // Новое (Quick Request) for Admin, Owner, Operator
-  if (userRole === 'owner' || userRole === 'admin' || userRole === 'operator') {
+  // Новое (Quick Request) for Admin, Owner, Operator, Head
+  if (userRole === 'owner' || userRole === 'admin' || userRole === 'operator' || userRole === 'head') {
     menuItems.push({ to: "/quick-request", icon: Plus, label: "Новое" });
   }
 
   // Повторы (Repeating) for all
   menuItems.push({ to: "/repeating", icon: Users, label: "Повторы" });
 
-  // Решения, Скрипты, База обучения for Owner, Admin
-  if (userRole === 'owner' || userRole === 'admin') {
+  // Решения, Скрипты, База обучения for Owner, Admin, Head
+  if (userRole === 'owner' || userRole === 'admin' || userRole === 'head') {
     menuItems.push({ to: "/resolutions", icon: ShieldCheck, label: "Решения" });
     menuItems.push({ to: "/scripts", icon: Zap, label: "Скрипты" });
     menuItems.push({ to: "/learning-base", icon: FileText, label: "База обучения" });
@@ -139,18 +139,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   menuItems.push({ to: "/profile", icon: User, label: "Профиль" });
   menuItems.push({ to: "/how-to", icon: HelpCircle, label: "Инфо" });
 
-  // Продуктивность for Owner only
-  if (userRole === "owner") {
+  // Продуктивность for Owner and Head
+  if (userRole === "owner" || userRole === "head") {
     menuItems.push({ to: "/performance", icon: TrendingUp, label: "Продуктивность" });
   }
 
-  // Команда (Users) for Owner, Admin, Manager
-  if (userRole === "admin" || userRole === "owner" || userRole === 'manager') {
+  // Команда (Users) for Owner, Admin, Manager, Head
+  if (userRole === "admin" || userRole === "owner" || userRole === 'manager' || userRole === 'head') {
     menuItems.push({ to: "/users", icon: Users, label: "Команда" });
   }
 
-  // Настройки for Owner, Admin
-  if (userRole === "admin" || userRole === "owner") {
+  // Настройки for Owner, Admin, Head
+  if (userRole === "admin" || userRole === "owner" || userRole === "head") {
     menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
   }
 
@@ -222,6 +222,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <p className="text-xs font-bold truncate">{user?.displayName || "Operator"}</p>
                 <p className="text-[10px] text-primary font-bold uppercase tracking-wider">
                   {userRole === 'owner' ? 'Владелец' : 
+                   userRole === 'head' ? 'Руководитель' :
                    userRole === 'admin' ? 'Админ' : 
                    userRole === 'manager' ? 'Менеджер' : 
                    userRole === 'operator' ? 'Оператор' : 

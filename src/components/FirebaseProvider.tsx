@@ -111,7 +111,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLoading(true);
     setError(null);
     try {
-      const email = `${loginName.trim().toLowerCase()}@crm-internal.local`;
+      const cleanLogin = loginName.trim();
+      // Support both nickname and full email
+      const email = cleanLogin.includes('@') ? cleanLogin : `${cleanLogin.toLowerCase()}@crm-internal.local`;
+      
+      console.log(`Attempting login for: ${email}`);
       const authResult = await signInWithEmailAndPassword(auth, email, passwordString);
       const fbUser = authResult.user;
 
@@ -120,16 +124,21 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const userToken = tokenResult.token;
 
       const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
-      const uData = userDoc.exists() ? userDoc.data() : { login: loginName, displayName: fbUser.displayName, role };
+      const uData = userDoc.exists() ? userDoc.data() : { login: cleanLogin, displayName: fbUser.displayName, role };
       
-      await logEvent({
-        userId: fbUser.uid,
-        userEmail: fbUser.email || "",
-        userName: uData?.displayName || "User",
-        login: loginName.trim(),
-        type: 'login',
-        action: 'Вход в систему'
-      });
+      // Log login via API to comply with "все через Cloud Functions"
+      fetch("/api/audit/log", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          action: "Вход в систему",
+          entityType: "Auth",
+          entityId: fbUser.uid
+        })
+      }).catch(e => console.error("Login audit fail:", e));
 
       setCurrentUser(fbUser);
       setToken(userToken);
@@ -138,9 +147,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setIsAuthorized(true);
 
     } catch (err: any) {
+      console.error("Login error details:", err);
       let msg = "Ошибка входа";
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         msg = "Неверный логин или пароль";
+      } else if (err.code === 'auth/network-request-failed') {
+        msg = "Ошибка сети. Проверьте подключение.";
+      } else if (err.code === 'auth/operation-not-allowed') {
+        msg = "Ошибка: метод входа 'Email/пароль' не включен в Firebase Console. Пожалуйста, включите его во вкладке Authentication > Sign-in method.";
+      } else if (err.message && err.message.includes("Identity Toolkit API")) {
+        msg = "Системная ошибка: API авторизации отключено. Обратитесь к администратору.";
       }
       setError(msg);
       throw new Error(msg);

@@ -40,10 +40,16 @@ export default function PublicForm() {
     e.preventDefault();
     setLoading(true);
     try {
-      const docRef = await addDoc(collection(db, "appeals"), {
-        ...formData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+      // Use requests collection for consistency with the rest of the app
+      const docRef = await addDoc(collection(db, "requests"), {
+        clientName: formData.client_name,
+        clientPhone: formData.client_phone,
+        branchId: formData.branch_name,
+        message: formData.complaint_text,
+        status: "in_progress",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        source: "website"
       });
 
       const appealId = docRef.id;
@@ -56,7 +62,7 @@ export default function PublicForm() {
         `📞 Телефон: ${formData.client_phone}\n` +
         `📍 Филиал: ${formData.branch_name}\n` +
         `📝 Текст: ${formData.complaint_text}\n\n` +
-        `🔗 <a href="${window.location.origin}/#/appeals/${appealId}">Открыть в CRM</a>`
+        `🔗 <a href="${window.location.origin}/#/requests/${appealId}">Открыть в CRM</a>`
       );
 
       // Send Audit notification
