@@ -17,12 +17,15 @@ import {
   Check,
   Download,
   ChevronRight,
-  Plus
+  Plus,
+  Clock,
+  History
 } from "lucide-react";
 import { format, subDays, addDays, startOfDay, endOfDay, isWithinInterval, startOfWeek, startOfMonth, startOfYear, subWeeks, subMonths, subYears, eachDayOfInterval } from "date-fns";
 import * as XLSX from "xlsx";
 import { ru } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
+import { useFirebase } from "../components/FirebaseProvider";
 import { sendTelegramFile } from "../utils/telegram";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -35,7 +38,7 @@ import {
 } from "../constants";
 
 import { cn } from "../lib/utils";
-import { Appeal } from "../types";
+import { CRMRequest } from "../types";
 
 const MultiSelectFilter = ({ label, values = [], options, onChange, placeholder }: any) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -136,7 +139,7 @@ const COLORS = ['#000000', '#3f3f46', '#71717a', '#a1a1aa', '#d4d4d8', '#e4e4e7'
 
 export default function Analytics() {
   const navigate = useNavigate();
-  const [appeals, setAppeals] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<"day" | "week" | "month" | "year" | "custom">("month");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
@@ -151,29 +154,36 @@ export default function Analytics() {
   const [motivationFilters, setMotivationFilters] = useState<string[]>([]);
   const [importanceFilter, setImportanceFilter] = useState("Все");
 
+  const { userRole, userData } = useFirebase();
+
   useEffect(() => {
-    const fetchAppeals = async () => {
+    const fetchRequests = async () => {
       try {
-        const q = query(collection(db, "appeals"), orderBy("created_at", "desc"));
+        let q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
-        const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setAppeals(data);
+        let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        if (userRole === 'manager' && userData?.branchId) {
+          data = data.filter((r: any) => r.branchId === userData.branchId);
+        }
+        
+        setRequests(data);
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, "appeals");
+        handleFirestoreError(error, OperationType.LIST, "requests");
       }
       setLoading(false);
     };
-    fetchAppeals();
+    fetchRequests();
   }, []);
 
-  const getFilteredData = (targetAppeals = appeals, targetPeriod = period, targetStart = startDate, targetEnd = endDate) => {
-    let filtered = [...targetAppeals];
+  const getFilteredData = (targetRequests = requests, targetPeriod = period, targetStart = startDate, targetEnd = endDate) => {
+    let filtered = [...targetRequests];
 
     if (targetPeriod === "custom" && targetStart && targetEnd) {
       const start = startOfDay(new Date(targetStart));
       const end = endOfDay(new Date(targetEnd));
-      filtered = filtered.filter(a => {
-        const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
+      filtered = filtered.filter(r => {
+        const date = r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt);
         return isWithinInterval(date, { start, end });
       });
     } else if (targetPeriod !== "custom") {
@@ -185,38 +195,23 @@ export default function Analytics() {
       else if (targetPeriod === "year") start = startOfYear(now);
       
       if (start) {
-        filtered = filtered.filter(a => {
-          const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
+        filtered = filtered.filter(r => {
+          const date = r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt);
           return date.getTime() >= start.getTime();
         });
       }
     }
 
-    if (statusFilter !== "Все") filtered = filtered.filter(a => a.status === statusFilter);
-    if (branchFilter !== "Все") filtered = filtered.filter(a => a.branch_name === branchFilter);
+    if (statusFilter !== "Все") {
+      const mappedStatus = statusFilter === "В работе" ? "in_progress" : statusFilter === "Выполнено" ? "done" : statusFilter;
+      filtered = filtered.filter(r => r.status === mappedStatus);
+    }
+    if (branchFilter !== "Все") filtered = filtered.filter(r => r.branchId === branchFilter);
     if (classificationFilters.length > 0) {
-      filtered = filtered.filter(a => {
-        const val = a.confirmed_classification || a.complaint_classification || "";
-        const vals = val.split(", ");
-        return classificationFilters.some(filter => vals.includes(filter));
-      });
+      filtered = filtered.filter(r => classificationFilters.includes(r.classification));
     }
-    if (sectionFilters.length > 0) {
-      filtered = filtered.filter(a => {
-        const val = a.confirmed_section || a.classification_section || "";
-        const vals = val.split(", ");
-        return sectionFilters.some(filter => vals.includes(filter));
-      });
-    }
-    if (motivationFilters.length > 0) {
-      filtered = filtered.filter(a => {
-        const val = a.motivation_status || "";
-        const vals = val.split(", ");
-        return motivationFilters.some(filter => vals.includes(filter));
-      });
-    }
-    if (importanceFilter !== "Все") filtered = filtered.filter(a => a.complaint_status === importanceFilter);
-
+    // Section and motivation filters might need more mapping or data migration
+    
     return filtered;
   };
 
@@ -246,14 +241,14 @@ export default function Analytics() {
       return [];
     }
 
-    return appeals.filter(a => {
-      const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
+    return requests.filter(r => {
+      const date = r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt);
       return isWithinInterval(date, { start, end });
     });
   };
 
-  const filteredAppeals = React.useMemo(() => getFilteredData(), [appeals, period, startDate, endDate, statusFilter, branchFilter, classificationFilters, sectionFilters, motivationFilters, importanceFilter]);
-  const previousAppeals = React.useMemo(() => getPreviousPeriodData(), [appeals, period, startDate, endDate]);
+  const filteredRequests = React.useMemo(() => getFilteredData(), [requests, period, startDate, endDate, statusFilter, branchFilter, classificationFilters, sectionFilters, motivationFilters, importanceFilter]);
+  const previousRequests = React.useMemo(() => getPreviousPeriodData(), [requests, period, startDate, endDate]);
 
   const safeFormatDate = (dateVal: any, formatStr: string) => {
     try {
@@ -332,136 +327,29 @@ export default function Analytics() {
   };
 
   const getExcelData = (data: any[], type: 'daily' | 'weekly' | 'comments' = 'daily') => {
-    if (type === 'daily') {
-      return data.map(a => {
-        const confirmedCls = a.confirmed_classification || a.complaint_classification || "";
-        const confirmedSec = a.confirmed_section || a.classification_section || "";
-        const mappedMotivation = a.justification_status === "Обосновано" ? getMotivationDepartment(confirmedCls, confirmedSec, a.source || "") : (a.motivation_status || "—");
-
-        return {
-          "ID": truncate(a.id),
-          "Дата создания": safeFormatDate(a.created_at, "dd.MM.yyyy HH:mm"),
-          "Статус": truncate(a.status || "—"),
-          "Филиал": truncate(a.branch_name || "—"),
-          "Клиент": truncate(a.client_name || "—"),
-          "Суть проблемы": truncate(a.complaint_text || "—"),
-          "Классификация": truncate(a.complaint_classification || "—"),
-          "Раздел": truncate(a.classification_section || "—"),
-          "Причина": truncate(a.root_cause_analysis || "—"),
-          "Требования к исправлению": truncate(a.solution || "—"),
-          "Корректирующие действия": truncate(a.corrective_actions || "—"),
-          "Ответственные": truncate(a.responsible_person || "—"),
-          "Срок выполнения": safeFormatDate(a.completion_date, "dd.MM.yyyy HH:mm"),
-          "Ожидаемый результат": "Выполнено"
-        };
-      });
-    } else {
-      // Logic for 'weekly' and 'comments' (Matrix reports)
-      const allCols = [
-        "Вкус", "Запах", "Внешний вид", "Пищевое отравление", "Инородное тело",
-        "Обслуживание официанта", "Обслуживание хостеса", "Обслуживание менеджера",
-        "Сроки доставки", "Состояние продукта при доставке", "Перепутаница",
-        "Не доставлен", "Недоложили", "Упаковка", "Колл центр", "Другое"
-      ];
-
-      const getMatrixColumn = (appeal: Appeal): string => {
-        if (appeal.justification_status === "Необосновано") return "Другое";
-        
-        const section = (appeal.confirmed_section || "").trim();
-
-        if (section.includes("Вкус")) return "Вкус";
-        if (section.includes("Запах")) return "Запах";
-        if (section.includes("Внешний вид")) return "Внешний вид";
-        if (section.includes("Отравление")) return "Пищевое отравление";
-        if (section.includes("Инородное тело")) return "Инородное тело";
-        if (section.includes("официант")) return "Обслуживание официанта";
-        if (section.includes("хостес")) return "Обслуживание хостеса";
-        if (section.includes("менеджер")) return "Обслуживание менеджера";
-        if (section.includes("доставки")) return "Сроки доставки";
-        if (section.includes("Состояние продукта")) return "Состояние продукта при доставке";
-        if (section.includes("Перепутаница")) return "Перепутаница";
-        if (section.includes("Не доставлен")) return "Не доставлен";
-        if (section.includes("Недоложили")) return "Недоложили";
-        if (section.includes("упаковк")) return "Упаковка";
-        if (section.includes("колл центр")) return "Колл центр";
-        
-        return "Другое";
+    return data.map(r => {
+      const statusMap: Record<string, string> = {
+        'in_progress': 'В работе',
+        'done': 'Выполнено'
       };
 
-      if (type === 'weekly') {
-        const reportData = BRANCH_NAMES.map(branch => {
-          const branchAppeals = data.filter(a => a.branch_name === branch && a.confirmed_section);
-          const row: any = { "Филиал": branch };
-          allCols.forEach(col => row[col] = 0);
-
-          branchAppeals.forEach(a => {
-            const col = getMatrixColumn(a);
-            row[col]++;
-          });
-
-          row["ОБЩЕЕ"] = allCols.reduce((sum, col) => sum + row[col], 0);
-          return row;
-        });
-
-        const totals: any = { "Филиал": "ИТОГО" };
-        allCols.forEach(col => {
-          totals[col] = reportData.reduce((sum, row) => sum + row[col], 0);
-        });
-        totals["ОБЩЕЕ"] = allCols.reduce((sum, col) => sum + totals[col], 0);
-        reportData.push(totals);
-        return reportData;
-      } else {
-        // type === 'comments'
-        const reportData = BRANCH_NAMES.map(branch => {
-          const branchAppeals = data.filter(a => a.branch_name === branch && a.confirmed_section);
-          const row: any = { "Филиал": branch };
-          const complaints: Record<string, string[]> = {};
-          const corrections: Record<string, string[]> = {};
-
-          allCols.forEach(col => {
-            complaints[col] = [];
-            corrections[col] = [];
-            row[col] = 0;
-          });
-
-          branchAppeals.forEach(a => {
-            const col = getMatrixColumn(a);
-            complaints[col].push(a.complaint_text || "—");
-            corrections[col].push(a.instant_correction || "—");
-          });
-
-          allCols.forEach(col => {
-            const count = complaints[col].length;
-            if (count > 0) {
-              row[col] = `${count}\n${complaints[col].join('\n')}\n\n${corrections[col].join('\n')}`;
-            } else {
-              row[col] = 0;
-            }
-          });
-
-          row["ОБЩЕЕ"] = allCols.reduce((sum, col) => sum + (complaints[col].length || 0), 0);
-          return row;
-        });
-
-        const totals: any = { "Филиал": "ИТОГО" };
-        allCols.forEach(col => {
-          totals[col] = reportData.reduce((sum, row) => {
-            const val = row[col];
-            const count = typeof val === 'string' ? parseInt(val.split('\n')[0]) : (typeof val === 'number' ? val : 0);
-            return sum + count;
-          }, 0);
-        });
-        totals["ОБЩЕЕ"] = allCols.reduce((sum, col) => sum + totals[col], 0);
-        reportData.push(totals);
-        return reportData;
-      }
-    }
+      return {
+        "ID": truncate(r.id),
+        "Дата создания": safeFormatDate(r.createdAt, "dd.MM.yyyy HH:mm"),
+        "Статус": statusMap[r.status] || r.status || "—",
+        "Филиал": r.branchId || "—",
+        "Клиент": r.clientName || "—",
+        "Сообщение": truncate(r.message || "—"),
+        "Классификация": r.classification || "—",
+        "Дата завершения": safeFormatDate(r.completedAt, "dd.MM.yyyy HH:mm")
+      };
+    });
   };
 
   const sendExcelToTelegram = async (type: 'daily' | 'weekly' | 'comments' = 'daily') => {
     setIsSendingToTelegram(true);
     try {
-      const dataToExport = getExcelData(filteredAppeals, type);
+      const dataToExport = getExcelData(filteredRequests, type);
       const ws = XLSX.utils.json_to_sheet(dataToExport);
       const wb = XLSX.utils.book_new();
       const sheetName = type === 'daily' ? "Стандартный отчёт" : type === 'weekly' ? "Свод отчёт" : "Отчёт с комментариями";
@@ -487,7 +375,7 @@ export default function Analytics() {
   };
 
   const exportToExcel = (type: 'daily' | 'weekly' | 'comments' = 'daily') => {
-    const dataToExport = getExcelData(filteredAppeals, type);
+    const dataToExport = getExcelData(filteredRequests, type);
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     const sheetName = type === 'daily' ? "Стандартный отчёт" : type === 'weekly' ? "Свод отчёт" : "Отчёт с комментариями";
@@ -524,35 +412,11 @@ export default function Analytics() {
     };
   };
 
-  // Data for Justification Status Chart
-  const justificationData = React.useMemo(() => Object.entries(
-    filteredAppeals.reduce((acc: any, curr) => {
-      const status = curr.justification_status || "Не указано";
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {})
-  ).map(([name, value]) => ({ name, value: value as number })), [filteredAppeals]);
-
-  // Data for Motivation Status Chart
-  const motivationData = React.useMemo(() => Object.entries(
-    filteredAppeals.reduce((acc: any, curr) => {
-      let status = curr.motivation_status || "Не указан";
-      if (curr.justification_status === "Обосновано") {
-        const confirmedCls = curr.confirmed_classification || curr.complaint_classification || "";
-        const confirmedSec = curr.confirmed_section || curr.classification_section || "";
-        status = getMotivationDepartment(confirmedCls, confirmedSec, curr.source || "");
-      }
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {})
-  ).map(([name, value]) => ({ name, value: value as number }))
-   .sort((a, b) => b.value - a.value), [filteredAppeals]);
-
   // Data for Branch Bar Chart
   const branchData = React.useMemo(() => {
     const data = Object.entries(
-      filteredAppeals.reduce((acc: any, curr) => {
-        const branch = curr.branch_name || "Не указан";
+      filteredRequests.reduce((acc: any, curr) => {
+        const branch = curr.branchId || "Не указан";
         acc[branch] = (acc[branch] || 0) + 1;
         return acc;
       }, {})
@@ -561,7 +425,7 @@ export default function Analytics() {
     return data
       .sort((a, b) => branchSortOrder === "desc" ? b.value - a.value : a.value - b.value)
       .slice(0, 10);
-  }, [filteredAppeals, branchSortOrder]);
+  }, [filteredRequests, branchSortOrder]);
 
   const getDateParams = () => {
     let start, end;
@@ -602,17 +466,17 @@ export default function Analytics() {
 
   // Data for Classification Pie Chart
   const classificationData = React.useMemo(() => Object.entries(
-    filteredAppeals.reduce((acc: any, curr) => {
-      const cat = curr.complaint_classification || "Другое";
+    filteredRequests.reduce((acc: any, curr) => {
+      const cat = curr.classification || "Другое";
       acc[cat] = (acc[cat] || 0) + 1;
       return acc;
     }, {})
-  ).map(([name, value]) => ({ name, value: value as number })), [filteredAppeals]);
+  ).map(([name, value]) => ({ name, value: value as number })), [filteredRequests]);
 
   // Data for Dynamics Line Chart
   const dynamicsData = React.useMemo(() => {
-    const counts = filteredAppeals.reduce((acc: any, curr) => {
-      const date = curr.created_at?.toDate ? curr.created_at.toDate() : new Date(curr.created_at);
+    const counts = filteredRequests.reduce((acc: any, curr) => {
+      const date = curr.createdAt?.toDate ? curr.createdAt.toDate() : new Date(curr.createdAt);
       const dateStr = format(date, "dd.MM.yyyy");
       acc[dateStr] = (acc[dateStr] || 0) + 1;
       return acc;
@@ -661,40 +525,16 @@ export default function Analytics() {
           return new Date(y1, m1 - 1, d1).getTime() - new Date(y2, m2 - 1, d2).getTime();
         });
     }
-  }, [filteredAppeals, period, startDate, endDate]);
+  }, [filteredRequests, period, startDate, endDate]);
 
-  // Data for Appeal Status Chart
-  const appealStatusData = React.useMemo(() => Object.entries(
-    filteredAppeals.reduce((acc: any, curr) => {
-      const status = curr.status || "Новый";
+  // Data for Request Status Chart
+  const requestStatusData = React.useMemo(() => Object.entries(
+    filteredRequests.reduce((acc: any, curr) => {
+      const status = curr.status || "in_progress";
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {})
-  ).map(([name, value]) => ({ name, value: value as number })), [filteredAppeals]);
-
-  // Data for Complaint Status Chart
-  const complaintStatusData = React.useMemo(() => Object.entries(
-    filteredAppeals.reduce((acc: any, curr) => {
-      const status = curr.complaint_status || "Не указано";
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {})
-  ).map(([name, value]) => ({ name, value: value as number })), [filteredAppeals]);
-
-  // Data for Status by Branch
-  const statusByBranchData = React.useMemo(() => {
-    const branches = Array.from(new Set(filteredAppeals.map(a => a.branch_name || "Не указан")));
-    return branches.map(branch => {
-      const branchAppeals = filteredAppeals.filter(a => a.branch_name === branch);
-      return {
-        name: branch,
-        Критические: branchAppeals.filter(a => a.complaint_status === "Критические").length,
-        Значимые: branchAppeals.filter(a => a.complaint_status === "Значимые").length,
-        Незначимые: branchAppeals.filter(a => a.complaint_status === "Незначимые").length,
-        total: branchAppeals.length
-      };
-    }).sort((a, b) => b.total - a.total).slice(0, 10);
-  }, [filteredAppeals]);
+  ).map(([name, value]) => ({ name, value: value as number })), [filteredRequests]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin" /></div>;
@@ -745,6 +585,18 @@ export default function Analytics() {
               />
             </motion.div>
           )}
+          <button
+            onClick={() => setShowComparison(!showComparison)}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all ring-1",
+              showComparison 
+                ? "bg-primary/5 text-primary ring-primary/20" 
+                : "bg-white text-zinc-400 ring-zinc-200 hover:ring-zinc-300"
+            )}
+          >
+            <History size={16} />
+            {showComparison ? "Сравнение: ВКЛ" : "Сравнение: ВЫКЛ"}
+          </button>
         </div>
       </header>
 
@@ -776,7 +628,11 @@ export default function Analytics() {
               <select 
                 value={branchFilter}
                 onChange={(e) => setBranchFilter(e.target.value)}
-                className="w-full bg-zinc-50 border-white rounded-2xl px-5 py-3.5 text-sm font-bold outline-none ring-2 ring-transparent focus:ring-primary/20 appearance-none shadow-sm transition-all text-[#1F2937]"
+                className={cn(
+                  "w-full bg-zinc-50 border-white rounded-2xl px-5 py-3.5 text-sm font-bold outline-none ring-2 ring-transparent focus:ring-primary/20 appearance-none shadow-sm transition-all text-[#1F2937]",
+                  userRole === 'manager' && "opacity-50 cursor-not-allowed"
+                )}
+                disabled={userRole === 'manager'}
               >
                 <option>Все</option>
                 {BRANCH_NAMES.map(b => <option key={b}>{b}</option>)}
@@ -886,302 +742,151 @@ export default function Analytics() {
             </div>
 
             <p className="ml-auto text-zinc-400 text-xs font-medium">
-              Найдено: <span className="text-primary font-bold">{filteredAppeals.length}</span> записей
+              Найдено: <span className="text-primary font-bold">{filteredRequests.length}</span> записей
             </p>
           </div>
       </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+      {/* Analytics Overview Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          title="Всего обращений" 
-          value={filteredAppeals.length} 
+          title="Всего запросов" 
+          value={filteredRequests.length} 
           icon={MessageSquare} 
-          trend={showComparison ? getTrend(filteredAppeals.length, previousAppeals.length) : null}
+          trend={showComparison ? getTrend(filteredRequests.length, previousRequests.length) : null}
         />
         <StatCard 
           title="В работе" 
-          value={filteredAppeals.filter(a => a.status === "В работе").length} 
-          icon={TrendingUp} 
-          color="text-warning" 
-          trend={showComparison ? getTrend(filteredAppeals.filter(a => a.status === "В работе").length, previousAppeals.filter(a => a.status === "В работе").length) : null}
+          value={filteredRequests.filter(r => r.status === 'in_progress').length} 
+          icon={Clock} 
+          color="text-amber-500"
         />
         <StatCard 
           title="Выполнено" 
-          value={filteredAppeals.filter(a => a.status === "Выполнен").length} 
+          value={filteredRequests.filter(r => r.status === 'done').length} 
           icon={Check} 
-          color="text-success" 
-          trend={showComparison ? getTrend(filteredAppeals.filter(a => a.status === "Выполнен").length, previousAppeals.filter(a => a.status === "Выполнен").length) : null}
-        />
-        <StatCard 
-          title="Просрочено" 
-          value={filteredAppeals.filter(a => a.deadline && new Date(a.deadline).getTime() < new Date().getTime()).length} 
-          icon={AlertCircle} 
-          color="text-error" 
-          trend={showComparison ? getTrend(filteredAppeals.filter(a => a.deadline && new Date(a.deadline).getTime() < new Date().getTime()).length, previousAppeals.filter(a => a.deadline && new Date(a.deadline).getTime() < new Date().getTime()).length) : null}
+          color="text-emerald-500"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        {/* Dynamics Chart */}
-        <div className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm lg:col-span-2 hover:shadow-xl transition-shadow duration-500">
-          <ChartHeader title="Динамика обращений" onExport={() => exportSectionToExcel(filteredAppeals, "Динамика_обращений")} />
-          <div className="h-[400px] w-full mt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={dynamicsData}>
-                <defs>
-                  <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2F80ED" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#2F80ED" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 10, fontWeight: 700}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 10, fontWeight: 700}} />
-                <Tooltip 
-                  contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)'}}
-                />
-                <Area type="monotone" dataKey="count" stroke="#2F80ED" strokeWidth={4} fillOpacity={1} fill="url(#colorCount)" />
-              </AreaChart>
-            </ResponsiveContainer>
+      {/* Kanban Board Visualization */}
+      <section className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+          <div>
+            <h3 className="text-2xl font-black text-zinc-900 tracking-tight">Поток запросов</h3>
+            <p className="text-zinc-500 text-sm font-medium">Мониторинг жизненного цикла инцидентов</p>
+          </div>
+          <div className="flex items-center gap-3 bg-zinc-100 p-1.5 rounded-2xl">
+             <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-600 shadow-sm">
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" /> Активные
+             </div>
+             <div className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                Всего: {filteredRequests.length}
+             </div>
           </div>
         </div>
-        {/* Category Chart */}
-        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
-          <ChartHeader title="Категории жалоб (статистика)" onExport={() => exportSectionToExcel(filteredAppeals, "Категории_жалоб")} />
-          <div className="h-[300px] w-full text-zinc-400">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={classificationData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                  onClick={(data) => {
-                    if (data && data.name) {
-                      navigate(`/analytics/category?value=${data.name}${getDateParams()}`);
-                    }
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {classificationData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {['in_progress', 'done'].map((status) => {
+            const statusRequests = filteredRequests.filter(r => r.status === status);
+            const getStatusConfig = (s: string) => {
+              switch(s) {
+                case 'Новый': return { color: 'bg-blue-500', light: 'bg-blue-50/50', border: 'border-blue-100', text: 'text-blue-600' };
+                case 'В работе': return { color: 'bg-amber-500', light: 'bg-amber-50/50', border: 'border-amber-100', text: 'text-amber-600' };
+                case 'Выполнен': return { color: 'bg-emerald-500', light: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600' };
+                default: return { color: 'bg-zinc-400', light: 'bg-zinc-50/50', border: 'border-zinc-200', text: 'text-zinc-400' };
+              }
+            };
+            const config = getStatusConfig(status);
+            
+            return (
+              <div key={status} className={cn("p-2 rounded-[2.5rem] flex flex-col border transition-all duration-500", config.light, config.border)}>
+                <div className="p-6 pb-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={cn("w-3 h-3 rounded-full", config.color, "shadow-lg shadow-current/20")} />
+                      <h4 className="font-black text-sm uppercase tracking-widest text-zinc-800">{status}</h4>
+                    </div>
+                    <span className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-zinc-500 shadow-sm border border-zinc-100">
+                      {statusRequests.length}
+                    </span>
+                  </div>
+                  <div className={cn("h-1 w-full rounded-full opacity-20", config.color)} />
+                </div>
+                
+                <div className="space-y-3 p-4 flex-1 overflow-y-auto max-h-[500px] custom-scrollbar scroll-smooth">
+                  <AnimatePresence mode="popLayout">
+                    {statusRequests.slice(0, 15).map((request, i) => (
+                      <motion.div 
+                        key={request.id}
+                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ delay: i * 0.05 }}
+                        onClick={() => navigate(`/requests/${request.id}`)}
+                        className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-zinc-100 hover:shadow-xl hover:shadow-zinc-200/50 transition-all cursor-pointer group relative overflow-hidden active:scale-95"
+                      >
+                        <div className={cn("absolute top-0 left-0 w-1 h-full opacity-0 group-hover:opacity-100 transition-opacity", config.color)} />
+                        
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="px-2 py-0.5 bg-zinc-50 rounded text-[9px] font-black text-zinc-400 uppercase tracking-tighter">
+                            #{request.id?.slice(-6).toUpperCase()}
+                          </div>
+                        </div>
 
-        {/* Motivation Pie Chart */}
-        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
-          <ChartHeader title="Отдел мотивации" onExport={() => exportSectionToExcel(filteredAppeals, "Отчет_по_мотивации")} />
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={motivationData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                  onClick={(data) => {
-                    if (data && data.name) {
-                      navigate(`/analytics/motivation?value=${data.name}${getDateParams()}`);
-                    }
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {motivationData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+                        <h5 className="text-xs font-black text-zinc-800 mb-2 line-clamp-1 group-hover:text-primary transition-colors">
+                          {request.clientName}
+                        </h5>
+                        <p className="text-[10px] text-zinc-400 font-medium line-clamp-2 leading-relaxed mb-4">
+                          {request.message}
+                        </p>
 
-        {/* Complaint Status Pie Chart (Importance) */}
-        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
-          <ChartHeader title="Важность жалоб (статистика)" onExport={() => exportSectionToExcel(filteredAppeals, "Важность_жалоб")} />
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={complaintStatusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                  onClick={(data) => navigate(`/analytics/complaint_status?value=${data.name}${getDateParams()}`)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {complaintStatusData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.name === "Критические" ? "#f43f5e" : entry.name === "Значимые" ? "#f59e0b" : "#3b82f6"} 
-                    />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+                        <div className="flex items-center justify-between pt-3 border-t border-zinc-50">
+                          <div className="flex items-center gap-2">
+                             <div className="w-5 h-5 rounded-full bg-zinc-100 flex items-center justify-center">
+                               <Users size={10} className="text-zinc-400" />
+                             </div>
+                             <span className="text-[10px] font-bold text-zinc-500">{request.branchId}</span>
+                          </div>
+                          <span className="text-[9px] font-black text-zinc-300">
+                            {safeFormatDate(request.createdAt, "dd MMM")}
+                          </span>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
 
-        {/* Justification Status Pie Chart */}
-        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
-          <ChartHeader title="Обоснованность жалоб (статистика)" onExport={() => exportSectionToExcel(filteredAppeals, "Обоснованность_жалоб")} />
-          <div className="h-[300px] w-full text-zinc-400">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={justificationData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                  onClick={(data) => navigate(`/analytics/justification?value=${data.name}${getDateParams()}`)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {justificationData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.name === "Обосновано" ? "#10b981" : entry.name === "Необосновано" ? "#f43f5e" : "#94a3b8"} 
-                    />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+                  {statusRequests.length > 15 && (
+                    <button 
+                      onClick={() => navigate(`/analytics/status?value=${status}${getDateParams()}`)}
+                      className="w-full py-4 bg-white/50 border-2 border-dashed border-zinc-200 rounded-2xl text-[9px] font-black text-zinc-400 uppercase tracking-[0.2em] hover:bg-white hover:text-primary hover:border-primary/30 transition-all flex items-center justify-center gap-2 group"
+                    >
+                      Посмотреть еще {statusRequests.length - 15}
+                      <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  )}
+                  
+                  {statusRequests.length === 0 && (
+                    <div className="flex-1 flex flex-col items-center justify-center py-20">
+                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-zinc-200 mb-3 shadow-inner">
+                        <MessageSquare size={20} />
+                      </div>
+                      <p className="text-[10px] font-black text-zinc-300 uppercase tracking-widest italic">Пусто</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
+      </section>
 
-        {/* Appeal Status Pie Chart */}
-        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
-          <ChartHeader title="Статус обращений (статистика)" onExport={() => exportSectionToExcel(filteredAppeals, "Статус_обращений")} />
-          <div className="h-[300px] w-full text-zinc-400">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={appealStatusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                  onClick={(data) => navigate(`/analytics/status?value=${data.name}${getDateParams()}`)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {appealStatusData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={
-                        entry.name === "Выполнен" ? "#10b981" : 
-                        entry.name === "В работе" ? "#f59e0b" : 
-                        entry.name === "Новый" ? "#3b82f6" : 
-                        "#94a3b8"
-                      } 
-                    />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Branch Bar Chart */}
-        <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <h3 className="text-lg font-bold">Топ-10 филиалов по жалобам</h3>
-              <button 
-                onClick={() => exportSectionToExcel(filteredAppeals.filter(a => branchData.some(b => b.name === a.branch_name)), "Топ_филиалов")}
-                className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-xl transition-all"
-              >
-                <Download size={18} />
-              </button>
-            </div>
-            <div className="flex bg-zinc-100 p-1 rounded-xl">
-              <button 
-                onClick={() => setBranchSortOrder("desc")}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${branchSortOrder === "desc" ? "bg-white text-black shadow-sm" : "text-zinc-400 hover:text-zinc-600"}`}
-              >
-                Убывание
-              </button>
-              <button 
-                onClick={() => setBranchSortOrder("asc")}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${branchSortOrder === "asc" ? "bg-white text-black shadow-sm" : "text-zinc-400 hover:text-zinc-600"}`}
-              >
-                Возрастание
-              </button>
-            </div>
-          </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart 
-                data={branchData} 
-                layout="vertical"
-                onClick={(data) => {
-                  if (data && data.activeLabel) {
-                    navigate(`/analytics/branch?value=${data.activeLabel}${getDateParams()}`);
-                  }
-                }}
-                style={{ cursor: 'pointer' }}
-              >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f4f4f5" />
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#71717a' }} width={100} />
-                <Tooltip 
-                  cursor={{ fill: '#f8f9fa' }}
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar 
-                  dataKey="value" 
-                  fill="#000" 
-                  radius={[0, 4, 4, 0]} 
-                  barSize={20} 
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Status by Branch Horizontal Stacked Bar Chart */}
         <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm col-span-full">
-          <ChartHeader title="Статус жалоб по филиалам (Топ-10)" onExport={() => exportSectionToExcel(filteredAppeals, "Статус_по_филиалам")} />
+          <ChartHeader title="Запросы по филиалам (Топ-10)" onExport={() => exportSectionToExcel(filteredRequests, "Запросы_по_филиалам")} />
           <div className="h-[500px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 layout="vertical"
-                data={statusByBranchData}
+                data={branchData}
                 onClick={(data) => {
                   if (data && data.activeLabel) {
                     navigate(`/analytics/branch?value=${data.activeLabel}${getDateParams()}`);
@@ -1198,11 +903,107 @@ export default function Analytics() {
                   contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                 />
                 <Legend verticalAlign="top" align="right" height={36} iconType="circle" />
-                <Bar dataKey="Критические" stackId="a" fill="#f43f5e" radius={[0, 0, 0, 0]} barSize={32} />
-                <Bar dataKey="Значимые" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} barSize={32} />
-                <Bar dataKey="Незначимые" stackId="a" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={32} />
+                <Bar dataKey="value" fill="#000" radius={[0, 4, 4, 0]} barSize={32} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 col-span-full">
+          {/* Dynamics Chart */}
+          <div className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm lg:col-span-2 hover:shadow-xl transition-shadow duration-500">
+            <ChartHeader title="Динамика запросов" onExport={() => exportSectionToExcel(filteredRequests, "Динамика_запросов")} />
+            <div className="h-[400px] w-full mt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dynamicsData}>
+                  <defs>
+                    <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2F80ED" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#2F80ED" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 10, fontWeight: 700}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 10, fontWeight: 700}} />
+                  <Tooltip 
+                    contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)'}}
+                  />
+                  <Area type="monotone" dataKey="count" stroke="#2F80ED" strokeWidth={4} fillOpacity={1} fill="url(#colorCount)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Category Chart */}
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
+            <ChartHeader title="Категории запросов (статистика)" onExport={() => exportSectionToExcel(filteredRequests, "Категории_запросов")} />
+            <div className="h-[300px] w-full text-zinc-400">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={classificationData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                    onClick={(data) => {
+                      if (data && data.name) {
+                        navigate(`/analytics/category?value=${data.name}${getDateParams()}`);
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {classificationData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Request Status Pie Chart */}
+          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm">
+            <ChartHeader title="Статус запросов (статистика)" onExport={() => exportSectionToExcel(filteredRequests, "Статус_запросов")} />
+            <div className="h-[300px] w-full text-zinc-400">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={requestStatusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                    onClick={(data) => navigate(`/analytics/status?value=${data.name}${getDateParams()}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {requestStatusData.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={
+                          entry.name === "done" ? "#10b981" : 
+                          entry.name === "in_progress" ? "#f59e0b" : 
+                          "#94a3b8"
+                        } 
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value, name) => [value, name === "done" ? "Выполнено" : name === "in_progress" ? "В работе" : name]}
+                  />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
@@ -1211,7 +1012,7 @@ export default function Analytics() {
           {/* Classification Summary Table */}
           <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold">Категории жалоб (статистика)</h3>
+              <h3 className="text-lg font-bold">Категории запросов (статистика)</h3>
             </div>
             <div className="space-y-4">
               {classificationData.slice(0, 10).map((item, i) => (
@@ -1227,7 +1028,7 @@ export default function Analytics() {
                   <div className="flex items-center gap-4">
                     <span className="text-sm font-bold">{item.value}</span>
                     <span className="text-xs text-zinc-400 w-10 text-right">
-                      {filteredAppeals.length > 0 ? Math.round(((item.value as number) / filteredAppeals.length) * 100) : 0}%
+                      {filteredRequests.length > 0 ? Math.round(((item.value as number) / filteredRequests.length) * 100) : 0}%
                     </span>
                   </div>
                 </div>
@@ -1235,7 +1036,7 @@ export default function Analytics() {
             </div>
             
             <div className="mt-8 pt-8 border-t border-zinc-100">
-              <h4 className="text-sm font-bold mb-4">Топ-10 филиалов по жалобам (статистика)</h4>
+              <h4 className="text-sm font-bold mb-4">Топ-10 филиалов по запросам (статистика)</h4>
               <div className="space-y-2">
                 {branchData.slice(0, 10).map((item, i) => (
                   <div key={i} className="flex justify-between text-xs">
@@ -1247,77 +1048,21 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Justification Summary Table */}
           <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold">Обоснованность жалоб (статистика)</h3>
+              <h3 className="text-lg font-bold">Активность по дням</h3>
             </div>
-            <div className="space-y-4">
-              {justificationData.map((item, i) => (
-                <div 
-                  key={i} 
-                  className="flex items-center justify-between group cursor-pointer"
-                  onClick={() => navigate(`/analytics/justification?value=${item.name}`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-2 h-2 rounded-full" 
-                      style={{ backgroundColor: item.name === "Обосновано" ? "#10b981" : item.name === "Необосновано" ? "#f43f5e" : "#94a3b8" }} 
-                    />
-                    <span className="text-sm font-medium text-zinc-600 group-hover:text-black transition-colors">{item.name}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-bold">{item.value}</span>
-                    <span className="text-xs text-zinc-400 w-10 text-right">
-                      {filteredAppeals.length > 0 ? Math.round(((item.value as number) / filteredAppeals.length) * 100) : 0}%
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-8 pt-8 border-t border-zinc-100">
-              <h4 className="text-sm font-bold mb-4">Динамика обращений (статистика)</h4>
-              <div className="space-y-2">
-                {dynamicsData.slice(0, 5).map((item, i) => (
-                  <div key={i} className="flex justify-between text-xs">
-                    <span className="text-zinc-500">{item.date}</span>
-                    <span className="font-bold">{item.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Motivation Summary Table */}
-          <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold">Отдел мотивации (статистика)</h3>
-            </div>
-            <div className="space-y-4">
-              {motivationData.map((item, i) => (
-                <div 
-                  key={i} 
-                  className="flex items-center justify-between group cursor-pointer"
-                  onClick={() => navigate(`/analytics/motivation?value=${item.name}`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[(i + 2) % COLORS.length] }} />
-                    <span className="text-sm font-medium text-zinc-600 group-hover:text-black transition-colors">{item.name}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-bold">{item.value}</span>
-                    <span className="text-xs text-zinc-400 w-10 text-right">
-                      {filteredAppeals.length > 0 ? Math.round(((item.value as number) / filteredAppeals.length) * 100) : 0}%
-                    </span>
-                  </div>
+            <div className="space-y-2">
+              {dynamicsData.slice(-10).reverse().map((item, i) => (
+                <div key={i} className="flex justify-between text-xs border-b border-zinc-50 pb-2">
+                  <span className="text-zinc-500">{item.date}</span>
+                  <span className="font-bold">{item.count} запросов</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
-    </div>
   );
 }
 

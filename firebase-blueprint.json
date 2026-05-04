@@ -1,151 +1,84 @@
 {
   "entities": {
-    "Appeal": {
-      "title": "Appeal",
-      "description": "A customer complaint or request",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "client_name": { "type": "string" },
-        "client_phone": { "type": "string" },
-        "complaint_text": { "type": "string" },
-        "created_at": { "type": "string", "format": "date-time" },
-        "order_date": { "type": "string", "format": "date-time" },
-        "branch_name": { "type": "string" },
-        "product_employee": { "type": "string" },
-        "complaint_classification": { "type": "string" },
-        "classification_section": { "type": "string" },
-        "adjective_comment": { "type": "string" },
-        "status": { "type": "string", "enum": ["Новый", "В работе", "Выполнен", "Отклонен"] },
-        "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
-        "responsible_person": { "type": "string" },
-        "deadline": { "type": "string", "format": "date-time" },
-        "root_cause_analysis": { "type": "string" },
-        "corrective_actions": { "type": "string" },
-        "order_receipt": { "type": "string" },
-        "sip_link": { "type": "string" },
-        "photo_url": { "type": "string" },
-        "accepted_by": { "type": "string" }
-      },
-      "required": ["client_name", "client_phone", "complaint_text", "created_at"]
-    },
     "User": {
-      "title": "User",
-      "description": "CRM Staff member",
+      "title": "User Profile",
+      "description": "User account information and roles",
       "type": "object",
       "properties": {
-        "uid": { "type": "string", "description": "Firebase Auth UID" },
-        "email": { "type": "string", "format": "email", "description": "Google Account Email" },
-        "displayName": { "type": "string", "description": "User's full name" },
-        "role": { "type": "string", "enum": ["head", "admin", "operator", "manager"], "description": "User's role in the system" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "lastLogin": { "type": "string", "format": "date-time" }
+        "uid": { "type": "string" },
+        "nickname": { "type": "string" },
+        "displayName": { "type": "string" },
+        "login": { "type": "string" },
+        "role": { "type": "string", "enum": ["operator", "manager", "admin", "owner", "viewer"] },
+        "branchId": { "type": "string" },
+        "phone": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["email", "role"]
+      "required": ["uid", "login", "role", "createdAt"]
     },
-    "Script": {
-      "title": "Script",
-      "description": "Operator script",
+    "CRMRequest": {
+      "title": "CRM Request",
+      "description": "Client requests or complaints",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "content": { "type": "string" },
-        "category": { "type": "string" },
-        "author": { "type": "string" },
-        "created_at": { "type": "string", "format": "date-time" }
+        "clientName": { "type": "string" },
+        "clientPhone": { "type": "string" },
+        "clientPhoto": { "type": "string" },
+        "message": { "type": "string" },
+        "classification": { "type": "string" },
+        "status": { "type": "string", "enum": ["in_progress", "done"] },
+        "managerId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "deadlineAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["title", "content", "category"]
+      "required": ["clientName", "clientPhone", "message", "status", "branchId", "createdAt"]
     },
-    "LearningBase": {
-      "title": "LearningBase",
-      "description": "Educational materials and instructions",
+    "RequestAction": {
+      "title": "Request Action",
+      "description": "Actions taken on a specific request",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "description": { "type": "string" },
-        "author": { "type": "string" },
-        "fileUrl": { "type": "string" },
-        "fileName": { "type": "string" },
-        "category": { "type": "string" },
-        "created_at": { "type": "string", "format": "date-time" },
-        "updated_at": { "type": "string", "format": "date-time" },
-        "created_by": { "type": "string" }
+        "requestId": { "type": "string" },
+        "instantFix": { "type": "string" },
+        "resolution": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["title", "description", "category", "author"]
+      "required": ["requestId", "resolution", "createdBy", "createdAt"]
     },
-    "Settings": {
-      "title": "Settings",
-      "description": "System settings including Telegram integration",
+    "SystemLog": {
+      "title": "System Log",
+      "description": "Audit trail of actions in the system",
       "type": "object",
       "properties": {
-        "telegram_token": { "type": "string" },
-        "telegram_chat_id": { "type": "string" },
-        "notifications_enabled": { "type": "boolean" },
-        "google_sheets_url": { "type": "string" }
-      }
-    },
-    "AuditLog": {
-      "title": "AuditLog",
-      "description": "Record of changes and events in the system",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "user_id": { "type": "string" },
-        "user_email": { "type": "string" },
-        "user_name": { "type": "string" },
-        "type": { "type": "string", "enum": ["login", "logout", "action"] },
+        "userId": { "type": "string" },
         "action": { "type": "string" },
-        "target_id": { "type": "string" },
-        "target_type": { "type": "string" },
-        "metadata": { "type": "object" },
-        "timestamp": { "type": "string", "format": "date-time" }
-      }
-    },
-    "ComplaintLog": {
-      "title": "ComplaintLog",
-      "description": "Log of manager actions on a specific appeal",
-      "type": "object",
-      "properties": {
-        "appeal_id": { "type": "string" },
-        "manager_id": { "type": "string" },
-        "manager_name": { "type": "string" },
-        "action": { "type": "string" },
-        "fields_filled": { "type": "array", "items": { "type": "string" } },
-        "timestamp": { "type": "string", "format": "date-time" }
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["appeal_id", "manager_id", "timestamp"]
+      "required": ["userId", "action", "createdAt"]
     }
   },
   "firestore": {
-    "/appeals": {
-      "schema": "Appeal",
-      "description": "Collection of customer appeals"
-    },
-    "/users": {
+    "/users/{userId}": {
       "schema": "User",
-      "description": "Collection of CRM users"
+      "description": "User profiles"
     },
-    "/scripts": {
-      "schema": "Script",
-      "description": "Collection of operator scripts"
+    "/requests/{requestId}": {
+      "schema": "CRMRequest",
+      "description": "List of CRM requests"
     },
-    "/learning_base": {
-      "schema": "LearningBase",
-      "description": "Educational materials"
+    "/requestActions/{actionId}": {
+      "schema": "RequestAction",
+      "description": "Actions carried out on requests"
     },
-    "/settings": {
-      "schema": "Settings",
-      "description": "Global system settings"
-    },
-    "/audit_logs": {
-      "schema": "AuditLog",
-      "description": "Audit trail"
-    },
-    "/complaint_logs": {
-      "schema": "ComplaintLog",
-      "description": "Logs for appeal processing actions"
+    "/logs/{logId}": {
+      "schema": "SystemLog",
+      "description": "Audit logs"
     }
   }
 }

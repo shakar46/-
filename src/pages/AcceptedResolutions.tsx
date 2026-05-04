@@ -8,36 +8,36 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { motion } from "motion/react";
 
-export default function ComplaintResolutions() {
-  const [appeals, setAppeals] = useState<any[]>([]);
+export default function AcceptedResolutions() {
+  const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    const fetchAppeals = async () => {
+    const fetchRequests = async () => {
       try {
         const q = query(
-          collection(db, "appeals"), 
-          where("status", "==", "Выполнен"),
-          orderBy("created_at", "desc")
+          collection(db, "requests"), 
+          where("status", "==", "done"),
+          orderBy("createdAt", "desc")
         );
         const querySnapshot = await getDocs(q);
         const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setAppeals(data);
+        setRequests(data);
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, "appeals");
+        handleFirestoreError(error, OperationType.LIST, "requests");
       }
       setLoading(false);
     };
-    fetchAppeals();
+    fetchRequests();
   }, []);
 
-  const filteredAppeals = appeals.filter(a => {
+  const filteredRequests = requests.filter(r => {
     const matchesSearch = 
-      a.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      a.client_phone?.includes(searchQuery) ||
-      a.branch_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.solution?.toLowerCase().includes(searchQuery.toLowerCase());
+      r.clientName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      r.clientPhone?.includes(searchQuery) ||
+      r.branchId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.message?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSearch;
   });
 
@@ -49,7 +49,7 @@ export default function ComplaintResolutions() {
     <div className="space-y-8">
       <header>
         <h1 className="text-4xl font-bold tracking-tight mb-2">Принятые решения</h1>
-        <p className="text-zinc-500 text-lg">Архив успешно решенных жалоб и принятых по ним мер.</p>
+        <p className="text-zinc-500 text-lg">Архив успешно решенных запросов и принятых по ним мер.</p>
       </header>
 
       <div className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm space-y-3">
@@ -58,7 +58,7 @@ export default function ComplaintResolutions() {
         </label>
         <input
           type="text"
-          placeholder="Клиент, филиал или текст решения..."
+          placeholder="Клиент, филиал или текст..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-black transition-all"
@@ -66,9 +66,9 @@ export default function ComplaintResolutions() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredAppeals.map((appeal) => (
+        {filteredRequests.map((request) => (
           <motion.div 
-            key={appeal.id}
+            key={request.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all group relative"
@@ -79,13 +79,14 @@ export default function ComplaintResolutions() {
                   <CheckCircle2 size={20} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold">{appeal.client_name}</div>
+                  <div className="text-sm font-bold">{request.clientName}</div>
                   <div className="text-[10px] text-zinc-400 font-medium uppercase tracking-widest">
-                    {appeal.created_at?.toDate ? format(appeal.created_at.toDate(), "dd MMMM yyyy", { locale: ru }) : "—"}
+                    {request.createdAt?.toDate ? format(request.createdAt.toDate(), "dd MMMM yyyy", { locale: ru }) : 
+                     request.createdAt ? format(new Date(request.createdAt), "dd MMMM yyyy", { locale: ru }) : "—"}
                   </div>
                 </div>
               </div>
-              <Link to={`/appeals/${appeal.id}`} className="p-2 text-zinc-300 hover:text-black transition-colors">
+              <Link to={`/requests/${request.id}`} className="p-2 text-zinc-300 hover:text-black transition-colors">
                 <ChevronRight size={20} />
               </Link>
             </div>
@@ -93,40 +94,26 @@ export default function ComplaintResolutions() {
             <div className="space-y-4">
               <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-widest text-zinc-400">
                 <div className="flex items-center gap-1.5">
-                  <MapPin size={12} /> {appeal.branch_name}
+                  <MapPin size={12} /> {request.branchId}
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Tag size={12} /> {appeal.complaint_classification}
+                  <Tag size={12} /> {request.classification}
                 </div>
               </div>
 
               <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
-                <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Принятое решение:</div>
+                <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Суть запроса:</div>
                 <p className="text-sm text-zinc-600 leading-relaxed italic mb-4">
-                  {appeal.solution || "Решение не указано"}
+                  {request.message}
                 </p>
-
-                {appeal.instant_correction && (
-                  <div className="mb-4">
-                    <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Мгновенное исправление:</div>
-                    <p className="text-xs text-zinc-500">{appeal.instant_correction}</p>
-                  </div>
-                )}
-
-                {appeal.justification_status && (
-                  <div className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest inline-block ${
-                    appeal.justification_status === "Обосновано" ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
-                  }`}>
-                    {appeal.justification_status}
-                  </div>
-                )}
+                <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Статус: Выполнено</div>
               </div>
             </div>
           </motion.div>
         ))}
-        {filteredAppeals.length === 0 && (
+        {filteredRequests.length === 0 && (
           <div className="col-span-full py-20 text-center text-zinc-400 font-medium">
-            Решенных жалоб не найдено
+            Решенных запросов не найдено
           </div>
         )}
       </div>

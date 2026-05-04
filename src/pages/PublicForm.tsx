@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { collection, addDoc, getDoc, doc } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
+import { signInAnonymously } from "firebase/auth";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { sendTelegramMessage } from "../utils/telegram";
 import { logEvent } from "../utils/logger";
@@ -21,6 +22,19 @@ export default function PublicForm() {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   });
+
+  useEffect(() => {
+    const ensureAuth = async () => {
+      if (!auth.currentUser) {
+        try {
+          await signInAnonymously(auth);
+        } catch (error) {
+          console.error("Anonymous sign-in failed:", error);
+        }
+      }
+    };
+    ensureAuth();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

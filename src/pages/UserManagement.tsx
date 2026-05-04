@@ -11,10 +11,14 @@ import {
   X,
   Check,
   AlertCircle,
-  Filter
+  Filter,
+  MoreVertical,
+  Phone,
+  Pencil,
+  User as UserIcon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import { logEvent } from "../utils/logger";
 import { 
   collection, 
@@ -43,7 +47,10 @@ interface UserData {
   id: string;
   uid?: string;
   displayName: string;
-  role: 'head' | 'admin' | 'operator' | 'manager';
+  nickname?: string;
+  phone?: string;
+  profilePhoto?: string;
+  role: 'head' | 'admin' | 'operator' | 'manager' | 'viewer';
   login: string;
   password?: string;
   responsibleBranch?: string;
@@ -62,9 +69,12 @@ const UserManagement = () => {
     login: "",
     password: "",
     displayName: "",
-    role: 'operator' as 'head' | 'admin' | 'operator' | 'manager',
+    nickname: "",
+    phone: "",
+    role: 'operator' as 'head' | 'admin' | 'operator' | 'manager' | 'viewer',
     responsibleBranch: ""
   });
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +105,8 @@ const UserManagement = () => {
       login: "",
       password: "",
       displayName: "",
+      nickname: "",
+      phone: "",
       role: 'operator',
       responsibleBranch: ""
     });
@@ -108,6 +120,8 @@ const UserManagement = () => {
       login: user.login || "",
       password: user.password || "",
       displayName: user.displayName || "",
+      nickname: user.nickname || "",
+      phone: user.phone || "",
       role: user.role || 'operator',
       responsibleBranch: user.responsibleBranch || ""
     });
@@ -130,26 +144,39 @@ const UserManagement = () => {
         login: formData.login.trim(),
         password: formData.password.trim(),
         displayName: formData.displayName.trim(),
+        nickname: formData.nickname.trim(),
+        phone: formData.phone.trim(),
         role: formData.role,
         responsibleBranch: formData.role === 'manager' ? formData.responsibleBranch : "",
         updatedAt: serverTimestamp()
       };
 
       if (!editingUser) {
-        // Check if login already exists
-        const q = query(collection(db, "users"), where("login", "==", formData.login.trim()));
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-          throw new Error("Пользователь с таким логином уже существует");
-        }
+        // CALL BACKEND API TO CREATE EMPLOYEE
+        const token = await auth.currentUser?.getIdToken();
+        const response = await fetch("/api/admin/createEmployee", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: formData.displayName.trim(),
+            login: formData.login.trim(),
+            password: formData.password.trim(),
+            role: formData.role,
+            phone: formData.phone.trim(),
+            branchId: formData.responsibleBranch || null
+          })
+        });
 
-        userData.createdAt = serverTimestamp();
-        const docId = formData.login.trim().toLowerCase().replace(/\s+/g, '_');
-        await setDoc(doc(db, "users", docId), userData);
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || "Ошибка на сервере");
+        }
         
         await sendTelegramMessage(
-          `🛡 <b>АУДИТ: Добавление пользователя</b>\n\n` +
+          `🛡 <b>АУДИТ: Добавление сотрудника</b>\n\n` +
           `👤 Кто: ${currentUser?.displayName || 'Admin'}\n` +
           `📧 Новый: ${formData.displayName} (${formData.login})\n` +
           `🛡 Роль: ${formData.role}`,
@@ -214,7 +241,7 @@ const UserManagement = () => {
     }
   };
 
-  const handleUpdateRole = async (userId: string, userLogin: string, currentRole: 'head' | 'admin' | 'operator' | 'manager') => {
+  const handleUpdateRole = async (userId: string, userLogin: string, currentRole: 'head' | 'admin' | 'operator' | 'manager' | 'viewer') => {
     if (userRole !== 'head') {
       alert("Только Руководитель может менять роли сотрудников");
       return;
@@ -224,9 +251,9 @@ const UserManagement = () => {
       return;
     }
 
-    const roles: ('head' | 'admin' | 'operator' | 'manager')[] = userRole === 'head' 
-      ? ['operator', 'manager', 'admin', 'head']
-      : ['operator', 'manager', 'admin'];
+    const roles: ('head' | 'admin' | 'operator' | 'manager' | 'viewer')[] = userRole === 'head' 
+      ? ['viewer', 'operator', 'manager', 'admin', 'head']
+      : ['viewer', 'operator', 'manager', 'admin'];
       
     const currentIndex = roles.indexOf(currentRole);
     const nextRole = roles[(currentIndex + 1) % roles.length];
@@ -234,10 +261,21 @@ const UserManagement = () => {
     if (!confirm(`Изменить роль пользователя ${userLogin} на ${nextRole === 'head' ? 'Руководитель' : nextRole === 'admin' ? 'Админ' : nextRole === 'manager' ? 'Менеджер' : 'Оператор'}?`)) return;
 
     try {
-      await updateDoc(doc(db, "users", userId), {
-        role: nextRole,
-        updatedAt: serverTimestamp()
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch("/api/admin/setUserRole", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          targetUid: userId,
+          role: nextRole
+        })
       });
+
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
 
       // Send Audit notification
       await sendTelegramMessage(
@@ -391,10 +429,11 @@ const UserManagement = () => {
                         u.role === 'head' ? "bg-indigo-600 text-white" :
                         u.role === 'admin' ? "bg-black text-white" : 
                         u.role === 'manager' ? "bg-zinc-800 text-white" :
+                        u.role === 'operator' ? "bg-zinc-200 text-zinc-700" :
                         "bg-zinc-100 text-zinc-600"
                       )}>
                         {u.role === 'head' ? <ShieldAlert size={12} /> : u.role === 'admin' ? <Shield size={12} /> : u.role === 'manager' ? <Check size={12} /> : <Users size={12} />}
-                        {u.role === 'head' ? 'Руководитель' : u.role === 'admin' ? 'Админ' : u.role === 'manager' ? 'Менеджер' : 'Оператор'}
+                        {u.role === 'head' ? 'Руководитель' : u.role === 'admin' ? 'Админ' : u.role === 'manager' ? 'Менеджер' : u.role === 'operator' ? 'Оператор' : 'Зритель'}
                       </div>
                     </td>
                     <td className="px-8 py-5">
@@ -406,24 +445,64 @@ const UserManagement = () => {
                       {u.lastLogin ? new Date(u.lastLogin).toLocaleString('ru-RU') : "—"}
                     </td>
                     <td className="px-8 py-5 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2 relative">
                         <button 
                           onClick={() => openEditModal(u)}
                           disabled={u.login === "shakar46" && userRole !== 'head'}
                           className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-lg transition-all"
                           title="Редактировать"
                         >
-                          <Plus size={18} className="rotate-45" />
+                          <Pencil size={18} />
                         </button>
-                        {u.login !== "shakar46" && (
+                        
+                        <div className="relative">
                           <button 
-                            onClick={() => handleDeleteUser(u.id, u.login || u.id)}
-                            className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                            title="Удалить профиль"
+                            onClick={() => setActiveMenuId(activeMenuId === u.id ? null : u.id)}
+                            className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-lg transition-all"
                           >
-                            <Trash2 size={18} />
+                            <MoreVertical size={18} />
                           </button>
-                        )}
+                          
+                          <AnimatePresence>
+                            {activeMenuId === u.id && (
+                              <>
+                                <div 
+                                  className="fixed inset-0 z-[60]" 
+                                  onClick={() => setActiveMenuId(null)}
+                                />
+                                <motion.div 
+                                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                  className="absolute right-0 top-full mt-1 w-48 bg-white border border-zinc-200 rounded-xl shadow-xl z-[70] overflow-hidden"
+                                >
+                                  {u.login !== "shakar46" && (
+                                    <button 
+                                      onClick={() => {
+                                        handleDeleteUser(u.id, u.login || u.id);
+                                        setActiveMenuId(null);
+                                      }}
+                                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 transition-all"
+                                    >
+                                      <Trash2 size={16} />
+                                      Удалить профиль
+                                    </button>
+                                  )}
+                                  <button 
+                                    onClick={() => {
+                                      handleUpdateRole(u.id, u.login || u.id, u.role);
+                                      setActiveMenuId(null);
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-zinc-600 hover:bg-zinc-50 transition-all"
+                                  >
+                                    <Shield size={16} />
+                                    Сменить роль
+                                  </button>
+                                </motion.div>
+                              </>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -469,16 +548,43 @@ const UserManagement = () => {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-bold text-zinc-700 mb-2 px-1">Имя сотрудника</label>
+                    <div className="relative">
+                      <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                      <input 
+                        type="text"
+                        required
+                        placeholder="Имя Фамилия"
+                        value={formData.displayName}
+                        onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                        className="w-full pl-12 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-black transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-zinc-700 mb-2 px-1">Никнейм</label>
                     <input 
                       type="text"
-                      required
-                      placeholder="Имя Фамилия"
-                      value={formData.displayName}
-                      onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                      placeholder="@nickname"
+                      value={formData.nickname}
+                      onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
                       className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-black transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-zinc-700 mb-2 px-1">Контактный номер</label>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                    <input 
+                      type="tel"
+                      placeholder="+998 (__) ___-__-__"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full pl-12 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-black transition-all"
                     />
                   </div>
                 </div>
@@ -510,7 +616,18 @@ const UserManagement = () => {
 
                 <div>
                   <label className="block text-sm font-bold text-zinc-700 mb-2 px-1">Роль</label>
-                  <div className={cn("grid gap-3", userRole === 'head' ? "grid-cols-4" : "grid-cols-3")}>
+                  <div className={cn("grid gap-3", userRole === 'head' ? "grid-cols-5" : "grid-cols-4")}>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, role: 'viewer' })}
+                      className={cn(
+                        "flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-2",
+                        formData.role === 'viewer' ? "border-black bg-zinc-100 shadow-sm" : "border-zinc-100 bg-white hover:border-zinc-200"
+                      )}
+                    >
+                      <Search size={20} className={formData.role === 'viewer' ? "text-black" : "text-zinc-400"} />
+                      <p className="font-bold text-[10px]">Зритель</p>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, role: 'operator' })}

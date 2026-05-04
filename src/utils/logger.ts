@@ -1,12 +1,13 @@
 import { db } from "../firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
-export type LogType = 'login' | 'logout' | 'action';
+export type LogType = 'login' | 'logout' | 'action' | 'change';
 
 interface LogParams {
   userId: string;
   userEmail: string;
   userName: string;
+  login?: string;
   type: LogType;
   action: string;
   targetId?: string;

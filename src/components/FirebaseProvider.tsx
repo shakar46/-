@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, getIdTokenResult } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
+
+import { logEvent } from '../utils/logger';
 
 interface FirebaseContextType {
   user: any | null;
+  token: string | null;
   userRole: string | null;
   userData: any | null;
   isAuthorized: boolean;
@@ -16,6 +19,7 @@ interface FirebaseContextType {
 
 const FirebaseContext = createContext<FirebaseContextType>({
   user: null,
+  token: null,
   userRole: null,
   userData: null,
   isAuthorized: false,
@@ -29,6 +33,7 @@ export const useFirebase = () => useContext(FirebaseContext);
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userData, setUserData] = useState<any | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -36,9 +41,22 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [error, setError] = useState<string | null>(null);
 
   const logout = async () => {
-    localStorage.removeItem('crm_session_id');
-    localStorage.removeItem('crm_login');
+    if (userData) {
+      try {
+        await logEvent({
+          userId: currentUser?.uid || "unknown",
+          userEmail: "",
+          userName: userData.displayName,
+          login: userData.login,
+          type: 'logout',
+          action: 'Выход из системы'
+        });
+      } catch (e) {
+        console.error("Logout log error:", e);
+      }
+    }
     setCurrentUser(null);
+    setToken(null);
     setUserData(null);
     setUserRole(null);
     setIsAuthorized(false);
@@ -47,31 +65,41 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setLoading(true);
       if (fbUser) {
-        const loginName = localStorage.getItem('crm_login');
-        if (loginName) {
-           const id = loginName.trim().toLowerCase().replace(/\s+/g, '_');
-           try {
-             const userDoc = await getDoc(doc(db, 'users', id));
-             if (userDoc.exists()) {
-               const uData = userDoc.data();
-               if (uData.uid === fbUser.uid) {
-                  setCurrentUser(fbUser);
-                  setUserData(uData);
-                  setUserRole(uData.role);
-                  setIsAuthorized(true);
-               } else {
-                 await logout();
-               }
-             } else {
-               await logout();
-             }
-           } catch (err) {
-             console.error("Session sync error:", err);
-           }
+        try {
+          // Force a token refresh to get latest custom claims
+          const tokenResult = await getIdTokenResult(fbUser, true);
+          const role = tokenResult.claims.role as string;
+          const userToken = tokenResult.token;
+          
+          const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
+          if (userDoc.exists()) {
+            const uData = userDoc.data();
+            setCurrentUser(fbUser);
+            setToken(userToken);
+            setUserData(uData);
+            setUserRole(role || uData.role);
+            setIsAuthorized(true);
+          } else {
+            console.warn("User doc not found, but Auth exists. Creating temporary profile...");
+            setCurrentUser(fbUser);
+            setToken(userToken);
+            setUserData({ uid: fbUser.uid, displayName: fbUser.displayName || fbUser.email, role });
+            setUserRole(role);
+            setIsAuthorized(true);
+          }
+        } catch (err: any) {
+          console.error("Session sync error:", err);
+          setError("Ошибка синхронизации сессии: " + (err.message || String(err)));
+          // Don't logout immediately, maybe it's a temporary network error
         }
       } else {
         setIsAuthorized(false);
+        setUserData(null);
+        setUserRole(null);
+        setToken(null);
+        setCurrentUser(null);
       }
       setLoading(false);
     });
@@ -83,57 +111,46 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLoading(true);
     setError(null);
     try {
-      // 1. Authenticate anonymously for Firebase context
-      const authResult = await signInAnonymously(auth);
+      const email = `${loginName.trim().toLowerCase()}@crm-internal.local`;
+      const authResult = await signInWithEmailAndPassword(auth, email, passwordString);
       const fbUser = authResult.user;
 
-      // 2. Derive ID and Fetch user doc directly (uses 'get' permission which is open)
-      const id = loginName.trim().toLowerCase().replace(/\s+/g, '_');
-      const userDoc = await getDoc(doc(db, 'users', id));
-      
-      if (!userDoc.exists()) {
-        throw new Error("Пользователь не найден");
-      }
+      const tokenResult = await getIdTokenResult(fbUser, true);
+      const role = tokenResult.claims.role as string;
+      const userToken = tokenResult.token;
 
-      const uData = userDoc.data();
+      const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
+      const uData = userDoc.exists() ? userDoc.data() : { login: loginName, displayName: fbUser.displayName, role };
       
-      // 3. Verify password
-      if (uData.password !== passwordString.trim()) {
-        throw new Error("Неверный пароль");
-      }
-      
-      // 4. Create a session mapping for security rules FIRST
-      await setDoc(doc(db, 'session_uids', fbUser.uid), {
+      await logEvent({
+        userId: fbUser.uid,
+        userEmail: fbUser.email || "",
+        userName: uData?.displayName || "User",
         login: loginName.trim(),
-        role: uData.role,
-        createdAt: new Date().toISOString()
+        type: 'login',
+        action: 'Вход в систему'
       });
 
-      // 5. Link Anonymous UID to this user record for Firestore Rules (now hasSession() will be true)
-      await setDoc(doc(db, 'users', userDoc.id), {
-        ...uData,
-        uid: fbUser.uid,
-        lastLogin: new Date().toISOString()
-      }, { merge: true });
-
-      localStorage.setItem('crm_session_id', userDoc.id);
-      localStorage.setItem('crm_login', loginName.trim());
-      
       setCurrentUser(fbUser);
-      setUserData({ ...uData, uid: fbUser.uid });
-      setUserRole(uData.role);
+      setToken(userToken);
+      setUserData(uData);
+      setUserRole(role || uData.role);
       setIsAuthorized(true);
 
     } catch (err: any) {
-      setError(err.message || "Ошибка входа");
-      throw err;
+      let msg = "Ошибка входа";
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        msg = "Неверный логин или пароль";
+      }
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <FirebaseContext.Provider value={{ user: currentUser, userRole, userData, isAuthorized, loading, error, login, logout }}>
+    <FirebaseContext.Provider value={{ user: currentUser, token, userRole, userData, isAuthorized, loading, error, login, logout }}>
       {children}
     </FirebaseContext.Provider>
   );

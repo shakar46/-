@@ -48,18 +48,18 @@ interface SidebarItemProps {
 
 // Pages
 import Dashboard from "./pages/Dashboard";
-import Appeals from "./pages/Appeals";
-import AppealDetail from "./pages/AppealDetail";
+import Requests from "./pages/Requests";
+import RequestDetail from "./pages/RequestDetail";
 import Analytics from "./pages/Analytics";
 import PublicForm from "./pages/PublicForm";
-import RepeatingAppeals from "./pages/RepeatingAppeals";
+import RepeatingRequests from "./pages/RepeatingRequests";
 import TelegramSettings from "./pages/TelegramSettings";
-import QuickAppeal from "./pages/QuickAppeal";
-import PoisoningAppeal from "./pages/PoisoningAppeal";
+import QuickRequest from "./pages/QuickRequest";
+import PoisoningRequest from "./pages/PoisoningRequest";
 import Scripts from "./pages/Scripts";
 import HowTo from "./pages/HowTo";
 import UserManagement from "./pages/UserManagement";
-import ComplaintResolutions from "./pages/ComplaintResolutions";
+import AcceptedResolutions from "./pages/AcceptedResolutions";
 import AnalyticsDetail from "./pages/AnalyticsDetail";
 import LearningBase from "./pages/LearningBase";
 import PerformanceStats from "./pages/PerformanceStats";
@@ -112,23 +112,45 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   const menuItems = [
     { to: "/", icon: LayoutDashboard, label: "Обзор" },
-    { to: "/appeals", icon: MessageSquare, label: "Обращения" },
-    { to: "/quick-appeal", icon: Plus, label: "Новое" },
-    { to: "/repeating", icon: Users, label: "Повторы" },
-    { to: "/resolutions", icon: ShieldCheck, label: "Решения" },
-    { to: "/analytics", icon: BarChart3, label: "Аналитика" },
-    { to: "/scripts", icon: Zap, label: "Скрипты" },
-    { to: "/learning-base", icon: FileText, label: "База обучения" },
-    { to: "/profile", icon: User, label: "Профиль" },
-    { to: "/how-to", icon: HelpCircle, label: "Инфо" },
+    { to: "/requests", icon: MessageSquare, label: "Запросы" },
   ];
 
-  if (userRole === "head") {
+  // Новое (Quick Request) for Admin, Owner, Operator
+  if (userRole === 'owner' || userRole === 'admin' || userRole === 'operator') {
+    menuItems.push({ to: "/quick-request", icon: Plus, label: "Новое" });
+  }
+
+  // Повторы (Repeating) for all
+  menuItems.push({ to: "/repeating", icon: Users, label: "Повторы" });
+
+  // Решения, Скрипты, База обучения for Owner, Admin
+  if (userRole === 'owner' || userRole === 'admin') {
+    menuItems.push({ to: "/resolutions", icon: ShieldCheck, label: "Решения" });
+    menuItems.push({ to: "/scripts", icon: Zap, label: "Скрипты" });
+    menuItems.push({ to: "/learning-base", icon: FileText, label: "База обучения" });
+  }
+
+  // Аналитика for Owner, Admin, Manager, Viewer
+  if (userRole !== 'operator') {
+    menuItems.push({ to: "/analytics", icon: BarChart3, label: "Аналитика" });
+  }
+
+  // Профиль, Инфо for all
+  menuItems.push({ to: "/profile", icon: User, label: "Профиль" });
+  menuItems.push({ to: "/how-to", icon: HelpCircle, label: "Инфо" });
+
+  // Продуктивность for Owner only
+  if (userRole === "owner") {
     menuItems.push({ to: "/performance", icon: TrendingUp, label: "Продуктивность" });
   }
 
-  if (userRole === "admin" || userRole === "head") {
+  // Команда (Users) for Owner, Admin, Manager
+  if (userRole === "admin" || userRole === "owner" || userRole === 'manager') {
     menuItems.push({ to: "/users", icon: Users, label: "Команда" });
+  }
+
+  // Настройки for Owner, Admin
+  if (userRole === "admin" || userRole === "owner") {
     menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
   }
 
@@ -199,7 +221,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold truncate">{user?.displayName || "Operator"}</p>
                 <p className="text-[10px] text-primary font-bold uppercase tracking-wider">
-                  {userRole === 'admin' ? 'Админ' : userRole === 'manager' ? 'Менеджер' : 'Оператор'}
+                  {userRole === 'owner' ? 'Владелец' : 
+                   userRole === 'admin' ? 'Админ' : 
+                   userRole === 'manager' ? 'Менеджер' : 
+                   userRole === 'operator' ? 'Оператор' : 
+                   userRole === 'viewer' ? 'Зритель' : 'Гость'}
                 </p>
               </div>
               <button 
@@ -305,16 +331,16 @@ export default function App() {
           <Layout>
             <Routes>
               <Route path="/" element={<PageTransition><Dashboard /></PageTransition>} />
-              <Route path="/appeals" element={<PageTransition><Appeals /></PageTransition>} />
-              <Route path="/appeals/:id" element={<PageTransition><AppealDetail /></PageTransition>} />
-              <Route path="/repeating" element={<PageTransition><RepeatingAppeals /></PageTransition>} />
-              <Route path="/resolutions" element={<PageTransition><ComplaintResolutions /></PageTransition>} />
+              <Route path="/requests" element={<PageTransition><Requests /></PageTransition>} />
+              <Route path="/requests/:id" element={<PageTransition><RequestDetail /></PageTransition>} />
+              <Route path="/repeating" element={<PageTransition><RepeatingRequests /></PageTransition>} />
+              <Route path="/resolutions" element={<PageTransition><AcceptedResolutions /></PageTransition>} />
               <Route path="/analytics" element={<PageTransition><Analytics /></PageTransition>} />
               <Route path="/analytics/:type" element={<PageTransition><AnalyticsDetail /></PageTransition>} />
               <Route path="/settings" element={<PageTransition><TelegramSettings /></PageTransition>} />
               <Route path="/users" element={<PageTransition><UserManagement /></PageTransition>} />
-              <Route path="/quick-appeal" element={<PageTransition><QuickAppeal /></PageTransition>} />
-              <Route path="/poisoning-appeal" element={<PageTransition><PoisoningAppeal /></PageTransition>} />
+              <Route path="/quick-request" element={<PageTransition><QuickRequest /></PageTransition>} />
+              <Route path="/poisoning-request" element={<PageTransition><PoisoningRequest /></PageTransition>} />
               <Route path="/scripts" element={<PageTransition><Scripts /></PageTransition>} />
               <Route path="/learning-base" element={<PageTransition><LearningBase /></PageTransition>} />
               <Route path="/performance" element={<PageTransition><PerformanceStats /></PageTransition>} />

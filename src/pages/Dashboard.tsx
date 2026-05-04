@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, getDocs, orderBy, limit } from "firebase/firestore";
+import { collection, query, getDocs, orderBy, limit, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { 
@@ -14,7 +14,7 @@ import {
   ArrowDownRight
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { format } from "date-fns";
+import { format, startOfDay } from "date-fns";
 import { ru } from "date-fns/locale";
 import { motion } from "motion/react";
 import { cn } from "../lib/utils";
@@ -35,28 +35,26 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayIso = today.toISOString();
+        const todayStart = startOfDay(new Date()).toISOString();
 
-        // Fetch only today's appeals for the list and stats
+        // Fetch only today's requests for the list and stats
         const q = query(
-          collection(db, "appeals"), 
-          orderBy("created_at", "desc")
+          collection(db, "requests"), 
+          where("createdAt", ">=", todayStart),
+          orderBy("createdAt", "desc")
         );
         const querySnapshot = await getDocs(q);
-        let allData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        let todayRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
         
         // Filter by branch for managers
-        if (userRole === 'manager' && userData?.responsibleBranch) {
-          allData = allData.filter(a => a.branch === userData.responsibleBranch);
+        if (userRole === 'manager' && userData?.branchId) {
+          todayRequests = todayRequests.filter(r => r.branchId === userData.branchId);
         }
 
-        const todayAppeals = allData.filter(a => new Date(a.created_at) >= today);
-        const recent = todayAppeals.slice(0, 5);
+        const recent = todayRequests;
 
-        const branchCounts = todayAppeals.reduce((acc: any, curr: any) => {
-          const bName = curr.branch || curr.branch_name || "Неизвестно";
+        const branchCounts = todayRequests.reduce((acc: any, curr: any) => {
+          const bName = curr.branchId || "Неизвестно";
           acc[bName] = (acc[bName] || 0) + 1;
           return acc;
         }, {});
@@ -72,15 +70,15 @@ export default function Dashboard() {
           .slice(0, 4);
 
         setStats({
-          total: todayAppeals.length,
-          new: todayAppeals.filter(a => a.status === "Новый").length,
-          inWork: todayAppeals.filter(a => a.status === "В работе").length,
-          completed: todayAppeals.filter(a => a.status === "Выполнен").length,
-          recentAppeals: recent,
+          total: todayRequests.length,
+          new: todayRequests.filter(r => r.status === "in_progress").length,
+          inWork: todayRequests.filter(r => r.managerId).length, // simplified logic
+          completed: todayRequests.filter(r => r.status === "done").length,
+          recentAppeals: recent, // keeping variable names for now to minimize JSX changes
           topBranches
         });
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, "appeals");
+        handleFirestoreError(error, OperationType.LIST, "requests");
       }
       setLoading(false);
     };
@@ -125,22 +123,22 @@ export default function Dashboard() {
         <div className="lg:col-span-2 space-y-8">
           <div className="flex items-center justify-between px-2">
             <h3 className="text-3xl font-black tracking-tight text-[#1F2937]">Последние обращения</h3>
-            <Link to="/appeals" className="flex items-center gap-2 text-primary font-black text-sm uppercase tracking-widest hover:translate-x-1 transition-transform">
+            <Link to="/requests" className="flex items-center gap-2 text-primary font-black text-sm uppercase tracking-widest hover:translate-x-1 transition-transform">
               Смотреть все <ArrowUpRight size={18} />
             </Link>
           </div>
           
           <div className="bg-white rounded-[3rem] border border-zinc-100 shadow-sm overflow-hidden">
-            <div className="divide-y divide-zinc-50">
-              {stats.recentAppeals.map((appeal, index) => (
+            <div className="divide-y divide-zinc-50 max-h-[1000px] overflow-y-auto custom-scrollbar scroll-smooth">
+              {stats.recentAppeals.map((request, index) => (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  key={appeal.id}
+                  key={request.id}
                 >
                   <Link 
-                    to={`/appeals/${appeal.id}`}
+                    to={`/requests/${request.id}`}
                     className="flex flex-col sm:flex-row sm:items-center justify-between p-8 hover:bg-zinc-50 transition-all group relative"
                   >
                     <div className="flex items-center gap-6">
@@ -148,28 +146,32 @@ export default function Dashboard() {
                         <MessageSquare size={28} />
                       </div>
                       <div>
-                        <h4 className="font-black text-xl text-[#1F2937] leading-tight mb-1">{appeal.client_name}</h4>
+                        <h4 className="font-black text-xl text-[#1F2937] leading-tight mb-1">{request.clientName}</h4>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{appeal.complaint_classification || "Без категории"}</span>
+                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{request.classification || "Без категории"}</span>
                           <span className="w-1 h-1 rounded-full bg-zinc-200" />
-                          <span className="text-[10px] font-black text-primary uppercase tracking-widest">{appeal.branch_name}</span>
+                          <span className="text-[10px] font-black text-primary uppercase tracking-widest">{request.branchId}</span>
                         </div>
                       </div>
                     </div>
                     
                     <div className="flex items-center gap-8 mt-6 sm:mt-0">
                       <div className="text-right hidden sm:block">
-                        <p className="text-sm font-black text-[#1F2937]">{format(new Date(appeal.created_at), "HH:mm")}</p>
-                        <p className="text-[10px] text-zinc-400 font-black uppercase tracking-[0.2em]">{format(new Date(appeal.created_at), "d MMM", { locale: ru })}</p>
+                        <p className="text-sm font-black text-[#1F2937]">
+                          {request.createdAt ? format(new Date(request.createdAt), "HH:mm") : "—"}
+                        </p>
+                        <p className="text-[10px] text-zinc-400 font-black uppercase tracking-[0.2em]">
+                          {request.createdAt ? format(new Date(request.createdAt), "d MMM", { locale: ru }) : "—"}
+                        </p>
                       </div>
                       
                       <div className={cn(
                         "px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm",
-                        appeal.status === "Новый" ? "bg-primary/5 text-primary border-primary/10" : 
-                        appeal.status === "Выполнен" ? "bg-success/5 text-success border-success/10" : 
+                        request.status === "in_progress" ? "bg-primary/5 text-primary border-primary/10" : 
+                        request.status === "done" ? "bg-success/5 text-success border-success/10" : 
                         "bg-zinc-100 text-zinc-500 border-zinc-200"
                       )}>
-                        {appeal.status}
+                        {request.status === "in_progress" ? "В работе" : "Выполнено"}
                       </div>
                       
                       <div className="w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center text-zinc-300 group-hover:text-primary transition-colors">
@@ -182,7 +184,7 @@ export default function Dashboard() {
               {stats.recentAppeals.length === 0 && (
                 <div className="p-16 text-center">
                   <p className="text-zinc-400 font-black text-sm uppercase tracking-[0.3em] mb-4">Жалоб пока нет</p>
-                  <Link to="/quick-appeal" className="inline-block bg-primary text-white px-8 py-4 rounded-[1.5rem] font-black tracking-widest shadow-xl shadow-primary/20">Добавить первую</Link>
+                  <Link to="/quick-request" className="inline-block bg-primary text-white px-8 py-4 rounded-[1.5rem] font-black tracking-widest shadow-xl shadow-primary/20">Добавить первую</Link>
                 </div>
               )}
             </div>

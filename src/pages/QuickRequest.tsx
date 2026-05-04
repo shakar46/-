@@ -25,21 +25,17 @@ import { BRANCH_NAMES, COMPLAINT_STATUSES } from "../constants";
 
 import imageCompression from "browser-image-compression";
 
-export default function QuickAppeal() {
-  const { user } = useFirebase();
+export default function QuickRequest() {
+  const { user, token } = useFirebase();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [formData, setFormData] = useState({
     client_name: "",
     client_phone: "",
     branch_name: BRANCH_NAMES[0],
-    order_check: "",
     complaint_text: "",
     complaint_photos: [] as string[],
-    status: "Новый",
     complaint_status: "Незначимые" as any,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
   });
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,71 +79,39 @@ export default function QuickAppeal() {
     setLoading(true);
     setStatus("idle");
     try {
-      const docRef = await addDoc(collection(db, "appeals"), {
-        ...formData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+      const response = await fetch("/api/requests/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          clientName: formData.client_name,
+          clientPhone: formData.client_phone,
+          clientPhoto: formData.complaint_photos.length > 0 ? formData.complaint_photos[0] : null,
+          message: formData.complaint_text,
+          classification: formData.complaint_status,
+          branchId: formData.branch_name
+        })
       });
-      
-      const appealId = docRef.id;
-      
-      // Send Main notification with photos if available
-      const messageText = `🚀 <b>Новое быстрое обращение</b>\n\n` +
-        `🆔 ID: #${appealId.slice(0, 8)}\n` +
-        `👤 Клиент: ${formData.client_name}\n` +
-        `📞 Телефон: ${formData.client_phone}\n` +
-        `📍 Филиал: ${formData.branch_name}\n` +
-        `⚠️ Важность: ${formData.complaint_status}\n` +
-        `📝 Текст: ${formData.complaint_text}\n\n` +
-        `🔗 <a href="${window.location.origin}/#/appeals/${appealId}">Открыть в CRM</a>`;
 
-      if (formData.complaint_photos && formData.complaint_photos.length > 0) {
-        // Send first photo with caption
-        await sendTelegramMessage(messageText, 'main', formData.complaint_photos[0]);
-        // Send remaining photos
-        for (let i = 1; i < formData.complaint_photos.length; i++) {
-          await sendTelegramMessage(`Фото ${i + 1} к обращению #${appealId.slice(0, 8)}`, 'main', formData.complaint_photos[i]);
-        }
-      } else {
-        await sendTelegramMessage(messageText);
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error);
       }
-
-      // Send Audit notification
-      await sendTelegramMessage(
-        `🛡 <b>АУДИТ: Новое быстрое обращение</b>\n\n` +
-        `👤 Кто: ${user?.displayName || "Система/Публичная форма"} (${user?.email || "N/A"})\n` +
-        `📝 Действие: Создано быстрое обращение\n` +
-        `🆔 ID: #${appealId.slice(0, 8)}\n` +
-        `👤 Клиент: ${formData.client_name}`,
-        'audit'
-      );
-
-      // Log action
-      await logEvent({
-        userId: user?.uid || "system",
-        userEmail: user?.email || "N/A",
-        userName: user?.displayName || "System",
-        type: 'action',
-        action: `Создано быстрое обращение #${appealId.slice(0, 8)}`,
-        metadata: { appealId, clientName: formData.client_name }
-      });
-
+      
       setStatus("success");
       setFormData({
         client_name: "",
         client_phone: "",
         branch_name: BRANCH_NAMES[0],
-        order_check: "",
         complaint_text: "",
         complaint_photos: [],
-        status: "Новый",
         complaint_status: "Незначимые",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Error creating request:", error);
       setStatus("error");
-      handleFirestoreError(error, OperationType.CREATE, "appeals");
     }
     setLoading(false);
   };
@@ -160,7 +124,7 @@ export default function QuickAppeal() {
           <p className="text-zinc-500 text-lg">Быстрое создание жалобы или предложения.</p>
         </div>
         <Link 
-          to="/poisoning-appeal"
+          to="/poisoning-request"
           className="flex items-center gap-2 bg-rose-50 text-rose-600 px-5 py-3 rounded-2xl font-bold hover:bg-rose-100 transition-all text-sm"
         >
           <AlertTriangle size={18} />
@@ -222,19 +186,6 @@ export default function QuickAppeal() {
                 onChange={handlePhoneChange}
                 className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 text-lg outline-none focus:ring-4 focus:ring-black/5 focus:border-black transition-all"
                 placeholder="998901234567"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-                <FileText size={12} /> Чек заказа
-              </label>
-              <input
-                type="text"
-                value={formData.order_check}
-                onChange={(e) => setFormData({ ...formData, order_check: e.target.value })}
-                className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 text-lg outline-none focus:ring-4 focus:ring-black/5 focus:border-black transition-all"
-                placeholder="Номер чека"
               />
             </div>
           </div>

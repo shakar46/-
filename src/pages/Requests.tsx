@@ -26,64 +26,59 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { motion, AnimatePresence } from "motion/react";
 import { BRANCH_NAMES } from "../constants";
-import { Appeal } from "../types";
+import { CRMRequest } from "../types";
 import { useFirebase } from "../components/FirebaseProvider";
 import * as XLSX from "xlsx";
 
 import { cn } from "../lib/utils";
 
-export default function Appeals() {
+export default function Requests() {
   const location = useLocation();
-  const [appeals, setAppeals] = useState<Appeal[]>([]);
+  const [requests, setRequests] = useState<CRMRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Все");
-  const [importanceFilter, setImportanceFilter] = useState("Все");
   const [branchFilter, setBranchFilter] = useState("Все");
+  const [classificationFilter, setClassificationFilter] = useState("Все");
+  const [importanceFilter, setImportanceFilter] = useState("Все");
   const [showFilters, setShowFilters] = useState(false);
-  const [sortField, setSortField] = useState<string>("created_at");
+  const [sortField, setSortField] = useState<string>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const search = params.get("search");
-    if (search) {
-      setSearchQuery(search);
-    }
-    fetchAppeals();
-  }, [location.search]);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const { userRole, userData } = useFirebase();
 
-  const fetchAppeals = async () => {
+  const fetchRequests = async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, "appeals"), orderBy("created_at", "desc"), limit(1000));
+      const q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
       const querySnapshot = await getDocs(q);
-      let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appeal));
+      let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CRMRequest));
       
-      if (userRole === 'manager' && userData?.responsibleBranch) {
-        data = data.filter(a => a.branch === userData.responsibleBranch);
+      if (userRole === 'manager' && userData?.branchId) {
+        data = data.filter(r => r.branchId === userData.branchId);
       }
       
-      setAppeals(data);
+      setRequests(data);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, "appeals");
+      handleFirestoreError(error, OperationType.LIST, "requests");
     }
     setLoading(false);
   };
 
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
   const handleDelete = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "appeals", id));
-      setAppeals(appeals.filter(a => a.id !== id));
+      await deleteDoc(doc(db, "requests", id));
+      setRequests(requests.filter(r => r.id !== id));
       setDeleteConfirmId(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `appeals/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, `requests/${id}`);
     }
   };
 
@@ -97,36 +92,8 @@ export default function Appeals() {
   };
 
   useEffect(() => {
-    fetchAppeals();
-  }, []);
-
-  useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, branchFilter, importanceFilter]);
-
-  const isNearingDeadline = (appeal: Appeal) => {
-    if (!appeal.completion_date || appeal.deadline) return false;
-    try {
-      const deadlineDate = new Date(appeal.completion_date);
-      const now = new Date();
-      const diffTime = deadlineDate.getTime() - now.getTime();
-      const diffHours = diffTime / (1000 * 60 * 60);
-      return diffHours > 0 && diffHours <= 24;
-    } catch (e) {
-      return false;
-    }
-  };
-
-  const isOverdue = (appeal: Appeal) => {
-    if (!appeal.completion_date || appeal.deadline) return false;
-    try {
-      const deadlineDate = new Date(appeal.completion_date);
-      const now = new Date();
-      return deadlineDate.getTime() < now.getTime();
-    } catch (e) {
-      return false;
-    }
-  };
+  }, [searchQuery, statusFilter, branchFilter, classificationFilter]);
 
   const formatDate = (dateValue: any) => {
     if (!dateValue) return "—";
@@ -139,51 +106,44 @@ export default function Appeals() {
     }
   };
 
-  const filteredAppeals = appeals.filter(a => {
+  const filteredRequests = requests.filter(r => {
     const matchesSearch = 
-      a.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.client_phone?.includes(searchQuery) ||
-      a.complaint_text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (a.id && a.id.toLowerCase().includes(searchQuery.toLowerCase()));
+      r.clientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.clientPhone?.includes(searchQuery) ||
+      r.message?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.id && r.id.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    const matchesStatus = statusFilter === "Все" || a.status === statusFilter;
-    const matchesBranch = branchFilter === "Все" || a.branch_name === branchFilter;
-    const matchesImportance = importanceFilter === "Все" || a.complaint_status === importanceFilter;
+    const matchesStatus = statusFilter === "Все" || 
+      (statusFilter === "В работе" && r.status === "in_progress") || 
+      (statusFilter === "Выполнено" && r.status === "done");
+    
+    const matchesBranch = branchFilter === "Все" || r.branchId === branchFilter;
+    const matchesClassification = classificationFilter === "Все" || r.classification === classificationFilter;
 
-    return matchesSearch && matchesStatus && matchesBranch && matchesImportance;
+    return matchesSearch && matchesStatus && matchesBranch && matchesClassification;
   }).sort((a, b) => {
     const valA = (a as any)[sortField];
     const valB = (b as any)[sortField];
     
-    if (sortField === "created_at") {
+    if (sortField === "createdAt") {
       const dateA = valA?.toDate ? valA.toDate() : new Date(valA || 0);
       const dateB = valB?.toDate ? valB.toDate() : new Date(valB || 0);
-      const timeA = isNaN(dateA.getTime()) ? 0 : dateA.getTime();
-      const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime();
-      return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
-    }
-    
-    if (typeof valA === "string") {
-      return sortOrder === "asc" 
-        ? valA.localeCompare(valB || "") 
-        : (valB || "").localeCompare(valA);
+      return sortOrder === "asc" ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
     }
     
     return sortOrder === "asc" ? (valA || 0) - (valB || 0) : (valB || 0) - (valA || 0);
   });
 
-  const totalPages = Math.ceil(filteredAppeals.length / itemsPerPage);
-  const paginatedAppeals = filteredAppeals.slice(
+  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
+  const paginatedRequests = filteredRequests.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "Новый": return "bg-blue-50 text-blue-600 border-blue-100";
-      case "В работе": return "bg-amber-50 text-amber-600 border-amber-100";
-      case "Выполнен": return "bg-emerald-50 text-emerald-600 border-emerald-100";
-      case "Отменен": return "bg-zinc-100 text-zinc-500 border-zinc-200";
+      case "in_progress": return "bg-amber-50 text-amber-600 border-amber-100";
+      case "done": return "bg-emerald-50 text-emerald-600 border-emerald-100";
       default: return "bg-zinc-50 text-zinc-400 border-zinc-100";
     }
   };
@@ -200,50 +160,38 @@ export default function Appeals() {
       }
     };
 
-    const truncate = (str: string, max: number = 32700) => {
-      if (!str) return "";
-      const s = String(str);
-      return s.length > max ? s.substring(0, max) + "..." : s;
-    };
-
-    const exportData = filteredAppeals.map(a => ({
-      "ID": truncate(a.id),
-      "Дата создания": safeFormatDate(a.created_at, "dd.MM.yyyy HH:mm"),
-      "Клиент": truncate(a.client_name),
-      "Телефон": truncate(a.client_phone),
-      "Филиал": truncate(a.branch_name),
-      "Классификация": truncate(a.complaint_classification),
-      "Раздел": truncate(a.classification_section),
-      "Статус": truncate(a.status),
-      "Текст обращения": truncate(a.complaint_text),
-      "Решение": truncate(a.solution || "—"),
-      "Дата выполнения": truncate(a.completion_date || "—"),
-      "Дедлайн статус": truncate(a.deadline || "—"),
-      "Отдел мотивации": truncate(a.motivation_status || "—"),
-      "Источник": truncate(a.source || "—")
+    const exportData = filteredRequests.map(r => ({
+      "ID": r.id,
+      "Дата создания": safeFormatDate(r.createdAt, "dd.MM.yyyy HH:mm"),
+      "Клиент": r.clientName,
+      "Телефон": r.clientPhone,
+      "Филиал": r.branchId,
+      "Классификация": r.classification,
+      "Статус": r.status === "in_progress" ? "В работе" : "Выполнено",
+      "Текст обращения": r.message,
+      "Дата завершения": safeFormatDate(r.completedAt, "dd.MM.yyyy")
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Appeals");
+    XLSX.utils.book_append_sheet(wb, ws, "Requests");
     
     // Set column widths
     const wscols = [
       {wch: 15}, {wch: 20}, {wch: 25}, {wch: 15}, {wch: 20}, 
-      {wch: 25}, {wch: 25}, {wch: 15}, {wch: 40}, {wch: 30}, 
-      {wch: 20}, {wch: 15}, {wch: 20}, {wch: 15}
+      {wch: 25}, {wch: 15}, {wch: 40}, {wch: 20}
     ];
     ws['!cols'] = wscols;
 
-    XLSX.writeFile(wb, `Appeals_Export_${format(new Date(), "dd_MM_yyyy")}.xlsx`);
+    XLSX.writeFile(wb, `Requests_Export_${format(new Date(), "dd_MM_yyyy")}.xlsx`);
   };
 
   return (
     <div className="space-y-8">
       <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white p-8 rounded-2xl shadow-sm border border-zinc-200">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Обращения</h1>
-          <p className="text-zinc-500 mt-1 font-medium">Контроль качества и работа с инцидентами</p>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Запросы</h1>
+          <p className="text-zinc-500 mt-1 font-medium">Контроль качества и работа с обращениями</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button 
@@ -254,11 +202,11 @@ export default function Appeals() {
             Экспорт
           </button>
           <Link
-            to="/quick-appeal"
+            to="/quick-request"
             className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary/90 transition-all shadow-md shadow-primary/10"
           >
             <Plus size={18} />
-            Оставить отзыв
+            Новое обращение
           </Link>
         </div>
       </header>
@@ -408,7 +356,7 @@ export default function Appeals() {
                     <p className="mt-6 text-zinc-400 text-xs font-black uppercase tracking-widest italic animate-pulse">Синхронизация данных...</p>
                   </td>
                 </tr>
-              ) : filteredAppeals.length === 0 ? (
+              ) : filteredRequests.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-10 py-32 text-center">
                     <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-zinc-200">
@@ -419,85 +367,57 @@ export default function Appeals() {
                   </td>
                 </tr>
               ) : (
-                paginatedAppeals.map((appeal, idx) => (
-                  <React.Fragment key={appeal.id}>
+                paginatedRequests.map((request, idx) => (
+                  <React.Fragment key={request.id}>
                     <tr 
                       className={cn(
-                        "hover:bg-primary/5 transition-all group cursor-pointer relative",
-                        expandedRowId === appeal.id ? "bg-primary/5 shadow-inner" : "",
-                        isNearingDeadline(appeal) && "bg-warning/5",
-                        isOverdue(appeal) && "bg-error/5"
+                        "hover:bg-primary/5 transition-all group cursor-pointer relative"
                       )}
-                      onClick={() => setExpandedRowId(expandedRowId === appeal.id ? null : appeal.id)}
                     >
                       <td className="px-10 py-8">
                         <div className="flex flex-col">
                           <div className="flex items-center gap-3 mb-2">
-                            <span className="text-[10px] font-black text-zinc-400 tracking-[0.2em]">#{appeal.id?.slice(0, 8) || "—"}</span>
-                            {isNearingDeadline(appeal) && (
-                              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning/10 text-warning text-[9px] font-black animate-pulse uppercase tracking-wider">
-                                <Clock className="w-2.5 h-2.5" />
-                                <span>Срочно</span>
-                              </div>
-                            )}
-                            {isOverdue(appeal) && (
-                              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-error/10 text-error text-[9px] font-black uppercase tracking-wider">
-                                <AlertCircle className="w-2.5 h-2.5" />
-                                <span>Просрочено</span>
-                              </div>
-                            )}
+                            <span className="text-[10px] font-black text-zinc-400 tracking-[0.2em]">#{request.id?.slice(0, 8) || "—"}</span>
                           </div>
                           <span className="text-sm font-black flex items-center gap-2 group-hover:text-primary transition-colors">
                             <Clock size={16} className="text-zinc-300 group-hover:text-primary/50" />
-                            {formatDate(appeal.created_at)}
+                            {formatDate(request.createdAt)}
                           </span>
                         </div>
                       </td>
                       <td className="px-8 py-8">
                         <div className="flex items-center gap-5">
-                          <div className="w-14 h-14 rounded-2xl bg-zinc-50 flex items-center justify-center text-zinc-300 group-hover:bg-white group-hover:text-primary group-hover:shadow-md transition-all">
-                            <User size={24} />
+                          <div className="w-14 h-14 rounded-2xl bg-zinc-50 flex items-center justify-center text-zinc-300 group-hover:bg-white group-hover:text-primary group-hover:shadow-md transition-all divide-none">
+                            {request.clientPhoto ? (
+                              <img src={request.clientPhoto} className="w-full h-full object-cover rounded-2xl" />
+                            ) : (
+                              <User size={24} />
+                            )}
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-lg font-black tracking-tight text-[#1F2937] group-hover:text-primary transition-colors">{appeal.client_name}</span>
-                            <span className="text-[11px] text-zinc-400 font-black tracking-widest">{appeal.client_phone}</span>
+                            <span className="text-lg font-black tracking-tight text-[#1F2937] group-hover:text-primary transition-colors">{request.clientName}</span>
+                            <span className="text-[11px] text-zinc-400 font-black tracking-widest">{request.clientPhone}</span>
                           </div>
                         </div>
                       </td>
                       <td className="px-8 py-8">
                         <div className="flex flex-col max-w-[240px]">
-                          <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">{appeal.branch_name}</span>
-                          <span className="text-sm font-black text-[#1F2937] truncate">{appeal.complaint_classification}</span>
-                          <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest truncate">{appeal.classification_section}</span>
+                          <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">{request.branchId}</span>
+                          <span className="text-sm font-black text-[#1F2937] truncate">{request.classification}</span>
                         </div>
                       </td>
                       <td className="px-8 py-8">
                         <div className={cn(
                           "inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm",
-                          getStatusColor(appeal.status)
+                          getStatusColor(request.status)
                         )}>
-                          {appeal.status === "Новый" && <AlertCircle size={14} />}
-                          {appeal.status === "Выполнен" && <CheckCircle2 size={14} />}
-                          {appeal.status}
+                          {request.status === "in_progress" ? "В работе" : "Выполнено"}
                         </div>
                       </td>
                       <td className="px-10 py-8 text-right">
                         <div className="flex items-center justify-end gap-4">
-                          {userRole === 'admin' && (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirmId(appeal.id);
-                              }}
-                              className="p-3 text-zinc-300 hover:text-error hover:bg-error/10 rounded-2xl transition-all active:scale-90"
-                              title="Удалить инцидент"
-                            >
-                              <Trash2 size={20} />
-                            </button>
-                          )}
                           <Link 
-                            to={`/appeals/${appeal.id}`}
-                            onClick={(e) => e.stopPropagation()}
+                            to={`/requests/${request.id}`}
                             className="p-4 bg-zinc-50 text-zinc-400 hover:bg-primary hover:text-white rounded-[1.25rem] transition-all group/btn shadow-inner active:scale-90"
                           >
                             <ChevronRight size={24} className="group-hover/btn:rotate-90 transition-transform" />
@@ -505,112 +425,6 @@ export default function Appeals() {
                         </div>
                       </td>
                     </tr>
-                    <AnimatePresence>
-                      {expandedRowId === appeal.id && (
-                        <tr>
-                          <td colSpan={5} className="px-0 py-0 border-none bg-zinc-50/50">
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: "auto", opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden"
-                            >
-                              <div className="px-16 py-12 grid grid-cols-1 lg:grid-cols-2 gap-16 border-l-[6px] border-primary m-10 bg-white rounded-[3rem] shadow-xl">
-                                <div className="space-y-10">
-                                  <div className="relative">
-                                    <div className="absolute -left-4 top-0 w-1 h-full bg-primary/20 rounded-full" />
-                                    <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-4">Суть инцидента</h4>
-                                    <p className="text-lg font-bold text-[#1F2937] leading-relaxed italic">
-                                      "{appeal.complaint_text || "Описание отсутствует"}"
-                                    </p>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-10">
-                                    <div className="p-6 bg-zinc-50 rounded-[2rem] border border-zinc-100">
-                                      <h4 className="text-[9px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-2">Мгновенная коррекция</h4>
-                                      <p className="text-sm font-black text-success leading-relaxed">
-                                        {appeal.instant_correction || "Не заполнено"}
-                                      </p>
-                                    </div>
-                                    <div className="p-6 bg-zinc-50 rounded-[2rem] border border-zinc-100">
-                                      <h4 className="text-[9px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-2">Источник жалобы</h4>
-                                      <p className="text-sm font-black text-primary leading-relaxed">
-                                        {appeal.source || "Не указан"}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="pt-6 border-t border-zinc-50 flex items-center justify-between">
-                                    <div className="flex items-center gap-6">
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400">
-                                          <User size={18} />
-                                        </div>
-                                        <div>
-                                          <h5 className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Ответственный</h5>
-                                          <p className="text-sm font-black text-[#1F2937]">{appeal.responsible_person || "Не назначен"}</p>
-                                        </div>
-                                      </div>
-                                      {appeal.processed_by_name && (
-                                        <div className="flex items-center gap-3 border-l pl-6 border-zinc-100">
-                                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                                            <Zap size={18} fill="currentColor" />
-                                          </div>
-                                          <div>
-                                            <h5 className="text-[9px] font-black text-primary uppercase tracking-widest">Обработал менеджер</h5>
-                                            <p className="text-sm font-black text-[#1F2937]">{appeal.processed_by_name}</p>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <Link to={`/appeals/${appeal.id}`} className="px-8 py-3 bg-primary text-white rounded-full font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20">
-                                      Редактировать полностью
-                                    </Link>
-                                  </div>
-                                </div>
-                                
-                                <div className="space-y-8">
-                                  <div className="bg-[#1F2937] p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -mr-12 -mt-12" />
-                                    <h4 className="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] mb-6">Классификация инцидента</h4>
-                                    <div className="space-y-6">
-                                      <div className="flex justify-between items-center pb-4 border-b border-white/5">
-                                        <span className="text-zinc-500 text-xs font-black">Кластер:</span>
-                                        <span className="text-white text-sm font-black">{appeal.complaint_classification}</span>
-                                      </div>
-                                      <div className="flex justify-between items-center pb-4 border-b border-white/5">
-                                        <span className="text-zinc-500 text-xs font-black">Раздел:</span>
-                                        <span className="text-white text-sm font-black">{appeal.classification_section}</span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-zinc-500 text-xs font-black">Продукт/Фокус:</span>
-                                        <span className="text-white text-sm font-black truncate max-w-[150px]">{appeal.product_employee || "Не указан"}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  
-                                  <div className="p-8 bg-zinc-50 rounded-[2.5rem] border border-zinc-100">
-                                    <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-4 text-center">Важность</h4>
-                                    <div className="flex justify-center">
-                                      {appeal.complaint_status ? (
-                                        <span className={cn(
-                                          "px-8 py-3 rounded-full text-[11px] font-black uppercase tracking-[0.3em] shadow-sm",
-                                          appeal.complaint_status === 'Критические' ? "bg-error text-white shadow-error/20" :
-                                          appeal.complaint_status === 'Значимые' ? "bg-warning text-white shadow-warning/20" :
-                                          "bg-primary text-white shadow-primary/20"
-                                        )}>
-                                          {appeal.complaint_status}
-                                        </span>
-                                      ) : (
-                                        <span className="text-zinc-300 font-black italic">Статус не определен</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </motion.div>
-                          </td>
-                        </tr>
-                      )}
-                    </AnimatePresence>
                   </React.Fragment>
                 ))
               )}
@@ -623,8 +437,8 @@ export default function Appeals() {
           <div className="flex items-center gap-6 order-2 xl:order-1">
             <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] bg-zinc-50 px-5 py-3 rounded-2xl shadow-inner italic">
               CRM <span className="text-zinc-200 mx-2">|</span> 
-              Записи <span className="text-primary">{filteredAppeals.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}—{Math.min(filteredAppeals.length, currentPage * itemsPerPage)}</span> 
-              из <span className="text-primary">{filteredAppeals.length}</span>
+              Записи <span className="text-primary">{filteredRequests.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}—{Math.min(filteredRequests.length, currentPage * itemsPerPage)}</span> 
+              из <span className="text-primary">{filteredRequests.length}</span>
             </p>
           </div>
           

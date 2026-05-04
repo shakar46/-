@@ -9,7 +9,7 @@ import { BRANCH_NAMES, COMPLAINT_CLASSIFICATIONS } from "../constants";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
 import { ru } from "date-fns/locale";
 
-export default function RepeatingAppeals() {
+export default function RepeatingRequests() {
   const [repeatingGroups, setRepeatingGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -20,28 +20,28 @@ export default function RepeatingAppeals() {
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
 
   useEffect(() => {
-    const fetchAppeals = async () => {
+    const fetchRequests = async () => {
       try {
-        const q = query(collection(db, "appeals"), orderBy("created_at", "desc"));
+        const q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
-        const allAppeals = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const allRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
         
         // Group by phone + classification + branch
-        const groups = allAppeals.reduce((acc: any, curr: any) => {
-          const key = `${curr.client_phone}_${curr.complaint_classification}_${curr.branch_name}`;
+        const groups = allRequests.reduce((acc: any, curr: any) => {
+          const key = `${curr.clientPhone}_${curr.classification}_${curr.branchId}`;
           if (!acc[key]) {
             acc[key] = {
               id: key,
-              phone: curr.client_phone,
-              name: curr.client_name,
-              classification: curr.complaint_classification,
-              branch: curr.branch_name,
+              phone: curr.clientPhone,
+              name: curr.clientName,
+              classification: curr.classification,
+              branch: curr.branchId,
               count: 0,
-              appeals: []
+              requests: []
             };
           }
           acc[key].count += 1;
-          acc[key].appeals.push(curr);
+          acc[key].requests.push(curr);
           return acc;
         }, {});
 
@@ -52,11 +52,11 @@ export default function RepeatingAppeals() {
 
         setRepeatingGroups(repeating);
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, "appeals");
+        handleFirestoreError(error, OperationType.LIST, "requests");
       }
       setLoading(false);
     };
-    fetchAppeals();
+    fetchRequests();
   }, []);
 
   const filteredGroups = repeatingGroups.filter(g => {
@@ -68,18 +68,18 @@ export default function RepeatingAppeals() {
     let matchesTime = true;
     const now = new Date();
     
-    const checkTime = (appealDate: Date) => {
+    const checkTime = (requestDate: Date) => {
       if (timeFilter === "day") {
-        return isWithinInterval(appealDate, { start: startOfDay(now), end: endOfDay(now) });
+        return isWithinInterval(requestDate, { start: startOfDay(now), end: endOfDay(now) });
       }
       if (timeFilter === "week") {
-        return isWithinInterval(appealDate, { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) });
+        return isWithinInterval(requestDate, { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) });
       }
       if (timeFilter === "month") {
-        return isWithinInterval(appealDate, { start: startOfMonth(now), end: endOfMonth(now) });
+        return isWithinInterval(requestDate, { start: startOfMonth(now), end: endOfMonth(now) });
       }
       if (timeFilter === "custom" && dateRange.start && dateRange.end) {
-        return isWithinInterval(appealDate, { 
+        return isWithinInterval(requestDate, { 
           start: startOfDay(new Date(dateRange.start)), 
           end: endOfDay(new Date(dateRange.end)) 
         });
@@ -87,10 +87,10 @@ export default function RepeatingAppeals() {
       return true;
     };
 
-    // If any appeal in the group matches the time filter, keep the group
+    // If any request in the group matches the time filter, keep the group
     if (timeFilter !== "all") {
-      matchesTime = g.appeals.some((a: any) => {
-        const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
+      matchesTime = g.requests.some((r: any) => {
+        const date = r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt);
         return checkTime(date);
       });
     }
@@ -245,10 +245,10 @@ export default function RepeatingAppeals() {
 
               <div className="space-y-3">
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">История обращений</p>
-                {group.appeals.slice(0, 3).map((appeal: any) => (
+                {group.requests.slice(0, 3).map((request: any) => (
                   <Link
-                    key={appeal.id}
-                    to={`/appeals/${appeal.id}`}
+                    key={request.id}
+                    to={`/requests/${request.id}`}
                     className="flex items-center justify-between p-3 rounded-xl border border-zinc-100 hover:border-black hover:bg-zinc-50 transition-all group"
                   >
                     <div className="flex items-center gap-3">
@@ -256,9 +256,9 @@ export default function RepeatingAppeals() {
                         <MessageSquare size={16} />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-bold truncate max-w-[200px]">{appeal.complaint_classification}</span>
+                        <span className="text-sm font-bold truncate max-w-[200px]">{request.classification}</span>
                         <span className="text-[10px] text-zinc-400">
-                          {appeal.created_at?.toDate ? format(appeal.created_at.toDate(), "dd.MM.yyyy") : format(new Date(appeal.created_at), "dd.MM.yyyy")}
+                          {request.createdAt?.toDate ? format(request.createdAt.toDate(), "dd.MM.yyyy") : format(new Date(request.createdAt), "dd.MM.yyyy")}
                         </span>
                       </div>
                     </div>
@@ -284,7 +284,7 @@ export default function RepeatingAppeals() {
             <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4 text-zinc-300">
               <Users size={32} />
             </div>
-            <h3 className="text-xl font-bold mb-2">Повторных жалоб не найдено</h3>
+            <h3 className="text-xl font-bold mb-2">Повторные обращения не найдены</h3>
             <p className="text-zinc-500">По выбранным критериям повторных обращений нет.</p>
           </div>
         )}
@@ -334,35 +334,34 @@ export default function RepeatingAppeals() {
                   </div>
                 </div>
 
-                {selectedGroup.appeals.sort((a: any, b: any) => {
-                  const dateA = a.created_at?.toDate ? a.created_at.toDate().getTime() : new Date(a.created_at).getTime();
-                  const dateB = b.created_at?.toDate ? b.created_at.toDate().getTime() : new Date(b.created_at).getTime();
+                {selectedGroup.requests.sort((a: any, b: any) => {
+                  const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime();
+                  const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime();
                   return dateB - dateA;
-                }).map((appeal: any) => (
-                  <div key={appeal.id} className="p-6 rounded-2xl border border-zinc-100 bg-white space-y-4">
+                }).map((request: any) => (
+                  <div key={request.id} className="p-6 rounded-2xl border border-zinc-100 bg-white space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                        {appeal.created_at?.toDate 
-                          ? format(appeal.created_at.toDate(), "d MMMM yyyy, HH:mm", { locale: ru })
-                          : format(new Date(appeal.created_at), "d MMMM yyyy, HH:mm", { locale: ru })}
+                        {request.createdAt?.toDate 
+                          ? format(request.createdAt.toDate(), "d MMMM yyyy, HH:mm", { locale: ru })
+                          : format(new Date(request.createdAt), "d MMMM yyyy, HH:mm", { locale: ru })}
                       </span>
                       <span className={`px-3 py-1 rounded-lg text-[10px] font-bold border ${
-                        appeal.status === "Выполнен" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                        appeal.status === "В работе" ? "bg-amber-50 text-amber-600 border-amber-100" :
-                        appeal.status === "Новый" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                        request.status === "done" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                        request.status === "in_progress" ? "bg-amber-50 text-amber-600 border-amber-100" :
                         "bg-zinc-50 text-zinc-400 border-zinc-100"
                       }`}>
-                        {appeal.status}
+                        {request.status === "in_progress" ? "В работе" : "Выполнено"}
                       </span>
                     </div>
                     
                     <div>
                       <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Текст обращения</p>
-                      <p className="text-sm text-zinc-600 leading-relaxed">{appeal.complaint_text}</p>
+                      <p className="text-sm text-zinc-600 leading-relaxed">{request.message}</p>
                     </div>
 
                     <Link 
-                      to={`/appeals/${appeal.id}`}
+                      to={`/requests/${request.id}`}
                       className="inline-flex items-center gap-2 text-xs font-bold text-black hover:underline"
                     >
                       Подробнее <ChevronRight size={14} />

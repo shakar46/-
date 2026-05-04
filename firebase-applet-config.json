@@ -1,10 +1,10 @@
 {
-  "projectId": "shakar-b3be8",
-  "appId": "1:467122997388:web:4778016354383aa0af53a9",
-  "apiKey": "AIzaSyDecxzvryLdlS9ce6X5qQuLQ1Ys8_T17hA",
-  "authDomain": "shakar-b3be8.firebaseapp.com",
+  "projectId": "shakarov",
+  "appId": "1:73512651835:web:92dfa00d453b325819201e",
+  "apiKey": "AIzaSyCBC5VZFprPSrWWR88wV_rXQ5AfBtogh2s",
+  "authDomain": "shakarov.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-5cb83a0c-4cd8-44bc-9f0a-dc138554c3ae",
-  "storageBucket": "shakar-b3be8.firebasestorage.app",
-  "messagingSenderId": "467122997388",
+  "storageBucket": "shakarov.firebasestorage.app",
+  "messagingSenderId": "73512651835",
   "measurementId": ""
 }
