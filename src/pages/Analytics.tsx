@@ -488,9 +488,21 @@ export default function Analytics() {
   // Data for Dynamics Line Chart
   const dynamicsData = React.useMemo(() => {
     const counts = filteredRequests.reduce((acc: any, curr) => {
-      const date = curr.createdAt?.toDate ? curr.createdAt.toDate() : new Date(curr.createdAt);
-      const dateStr = format(date, "dd.MM.yyyy");
-      acc[dateStr] = (acc[dateStr] || 0) + 1;
+      let date;
+      if (curr.createdAt?.toDate) {
+        date = curr.createdAt.toDate();
+      } else if (curr.createdAt?._seconds) {
+        date = new Date(curr.createdAt._seconds * 1000);
+      } else if (curr.createdAt?.seconds) {
+        date = new Date(curr.createdAt.seconds * 1000);
+      } else {
+        date = new Date(curr.createdAt);
+      }
+      
+      if (!isNaN(date.getTime())) {
+        const dateStr = format(date, "dd.MM.yyyy");
+        acc[dateStr] = (acc[dateStr] || 0) + 1;
+      }
       return acc;
     }, {});
 

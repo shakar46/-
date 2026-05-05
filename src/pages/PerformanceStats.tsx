@@ -17,10 +17,10 @@ import {
 } from "lucide-react";
 import { collection, query, getDocs, orderBy, where } from "firebase/firestore";
 import { db } from "../firebase";
-import { format, startOfDay, endOfDay, isWithinInterval, subDays, startOfMonth, startOfWeek } from "date-fns";
-import { ru } from "date-fns/locale";
+import { startOfDay, endOfDay, isWithinInterval, subDays, startOfMonth, startOfWeek } from "date-fns";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
+import { convertToDate, safeFormat } from "../utils/dateUtils";
 
 const PerformanceStats = () => {
   const [appeals, setAppeals] = useState<any[]>([]);
@@ -73,7 +73,8 @@ const PerformanceStats = () => {
     }
 
     return filtered.filter(a => {
-      const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
+      const date = convertToDate(a.created_at);
+      if (!date) return false;
       return isWithinInterval(date, { start, end });
     });
   }, [appeals, period, startDate, endDate]);
@@ -94,7 +95,8 @@ const PerformanceStats = () => {
     }
 
     return logs.filter(l => {
-      const date = new Date(l.timestamp);
+      const date = convertToDate(l.timestamp);
+      if (!date) return false;
       return isWithinInterval(date, { start, end });
     });
   }, [logs, period, startDate, endDate]);
@@ -362,7 +364,7 @@ const PerformanceStats = () => {
             <div key={i} className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm hover:shadow-md transition-all">
               <div className="flex justify-between items-start mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                  {format(new Date(l.timestamp), "dd MMM, HH:mm", { locale: ru })}
+                  {safeFormat(l.timestamp, "dd MMM, HH:mm")}
                 </span>
                 <span className="px-2 py-0.5 bg-zinc-100 text-[10px] font-bold rounded-full">
                   {l.action}

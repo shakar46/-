@@ -24,6 +24,7 @@ import { ru } from "date-fns/locale";
 import { cn } from "../lib/utils";
 import { CRMRequest, RequestAction } from "../types";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
+import { convertToDate, safeFormat } from "../utils/dateUtils";
 
 export default function AppealDetail() {
   const { id } = useParams();
@@ -183,13 +184,13 @@ export default function AppealDetail() {
               <div>
                 <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Дедлайн</p>
                 <p className="text-sm font-bold text-zinc-900">
-                  {request?.deadlineAt ? format(request.deadlineAt.toDate(), "dd MMM, HH:mm", { locale: ru }) : "—"}
+                  {safeFormat(request?.deadlineAt, "dd MMM, HH:mm")}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Создано</p>
                 <p className="text-sm font-bold text-zinc-900">
-                  {request?.createdAt ? format(request.createdAt.toDate(), "dd.MM.yyyy HH:mm", { locale: ru }) : "—"}
+                  {safeFormat(request?.createdAt, "dd.MM.yyyy HH:mm")}
                 </p>
               </div>
             </div>
@@ -221,7 +222,7 @@ export default function AppealDetail() {
                        </div>
                        <span className="text-xs font-black text-zinc-900 uppercase">Менеджер #{action.createdBy ? action.createdBy.slice(0, 4) : "????"}</span>
                     </div>
-                    <span className="text-[10px] font-bold text-zinc-400">{action.createdAt ? format(action.createdAt.toDate(), "dd.MM.yyyy HH:mm") : "—"}</span>
+                    <span className="text-[10px] font-bold text-zinc-400">{safeFormat(action.createdAt, "dd.MM.yyyy HH:mm")}</span>
                   </div>
                   
                   {action.instantFix && (
@@ -304,7 +305,7 @@ export default function AppealDetail() {
                  <p className="text-sm font-bold">#{request?.managerId ? request.managerId.slice(0, 8) : "—"}</p>
                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mt-4 mb-1">Дата закрытия</p>
                  <p className="text-sm font-bold">
-                   {request?.completedAt ? format(request.completedAt.toDate(), "dd.MM.yyyy", { locale: ru }) : "—"}
+                   {safeFormat(request?.completedAt, "dd.MM.yyyy")}
                  </p>
                </div>
             </section>

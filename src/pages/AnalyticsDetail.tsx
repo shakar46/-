@@ -8,9 +8,9 @@ import {
   PieChart, Pie, Cell, Legend 
 } from "recharts";
 import { ChevronLeft, MessageSquare, Calendar, MapPin, Tag, Users, AlertCircle, X, Image as ImageIcon } from "lucide-react";
-import { format, startOfDay, endOfDay } from "date-fns";
-import { ru } from "date-fns/locale";
+import { startOfDay, endOfDay } from "date-fns";
 import { motion, AnimatePresence } from "motion/react";
+import { convertToDate, safeFormat } from "../utils/dateUtils";
 
 // Helper to determine motivation department (duplicated from Analytics.tsx for consistency)
 const getMotivationDepartment = (classification: string, section: string, source: string) => {
@@ -65,8 +65,8 @@ export default function AnalyticsDetail() {
           const start = startOfDay(new Date(startDateParam));
           const end = endOfDay(new Date(endDateParam));
           data = data.filter(a => {
-            const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
-            return date >= start && date <= end;
+            const date = convertToDate(a.created_at);
+            return date && date >= start && date <= end;
           });
         }
 
@@ -76,8 +76,7 @@ export default function AnalyticsDetail() {
         } else if (type === "date") {
           const targetDate = value; // format "dd.MM.yyyy"
           data = data.filter(a => {
-            const date = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at);
-            return format(date, "dd.MM.yyyy") === targetDate;
+            return safeFormat(a.created_at, "dd.MM.yyyy") === targetDate;
           });
         } else if (type === "category") {
           data = data.filter(a => (a.confirmed_classification || a.complaint_classification || "Другое") === value);
@@ -329,7 +328,7 @@ function ComplaintsTable({ data, setSelectedPhoto }: { data: any[], setSelectedP
               className="px-6 py-4 text-sm text-zinc-500 whitespace-nowrap"
               onClick={() => navigate(`/appeals/${a.id}`)}
             >
-              {a.created_at?.toDate ? format(a.created_at.toDate(), "dd.MM.yyyy HH:mm") : format(new Date(a.created_at), "dd.MM.yyyy HH:mm")}
+              {safeFormat(a.created_at, "dd.MM.yyyy HH:mm")}
             </td>
             <td 
               className="px-6 py-4"

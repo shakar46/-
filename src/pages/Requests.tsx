@@ -22,13 +22,12 @@ import {
   Zap
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
-import { format } from "date-fns";
-import { ru } from "date-fns/locale";
 import { motion, AnimatePresence } from "motion/react";
 import { BRANCH_NAMES } from "../constants";
 import { CRMRequest } from "../types";
 import { useFirebase } from "../components/FirebaseProvider";
 import * as XLSX from "xlsx";
+import { convertToDate, safeFormat } from "../utils/dateUtils";
 
 import { cn } from "../lib/utils";
 
@@ -107,16 +106,7 @@ export default function Requests() {
     setCurrentPage(1);
   }, [searchQuery, statusFilter, branchFilter, classificationFilter]);
 
-  const formatDate = (dateValue: any) => {
-    if (!dateValue) return "—";
-    try {
-      const date = dateValue.toDate ? dateValue.toDate() : new Date(dateValue);
-      if (isNaN(date.getTime())) return "—";
-      return format(date, "dd MMM, HH:mm", { locale: ru });
-    } catch (e) {
-      return "—";
-    }
-  };
+  const formatDate = (dateValue: any) => safeFormat(dateValue, "dd MMM, HH:mm");
 
   const filteredRequests = requests.filter(r => {
     const matchesSearch = 
@@ -161,27 +151,16 @@ export default function Requests() {
   };
 
   const handleExport = () => {
-    const safeFormatDate = (dateVal: any, formatStr: string) => {
-      try {
-        if (!dateVal) return "—";
-        const date = dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
-        if (isNaN(date.getTime())) return "—";
-        return format(date, formatStr, { locale: ru });
-      } catch (e) {
-        return "—";
-      }
-    };
-
     const exportData = filteredRequests.map(r => ({
       "ID": r.id,
-      "Дата создания": safeFormatDate(r.createdAt, "dd.MM.yyyy HH:mm"),
+      "Дата создания": safeFormat(r.createdAt, "dd.MM.yyyy HH:mm"),
       "Клиент": r.clientName,
       "Телефон": r.clientPhone,
       "Филиал": r.branchId,
       "Классификация": r.classification,
       "Статус": r.status === "in_progress" ? "В работе" : "Выполнено",
       "Текст обращения": r.message,
-      "Дата завершения": safeFormatDate(r.completedAt, "dd.MM.yyyy")
+      "Дата завершения": safeFormat(r.completedAt, "dd.MM.yyyy")
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -195,7 +174,7 @@ export default function Requests() {
     ];
     ws['!cols'] = wscols;
 
-    XLSX.writeFile(wb, `Requests_Export_${format(new Date(), "dd_MM_yyyy")}.xlsx`);
+    XLSX.writeFile(wb, `Requests_Export_${safeFormat(new Date(), "dd_MM_yyyy")}.xlsx`);
   };
 
   return (

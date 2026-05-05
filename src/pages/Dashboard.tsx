@@ -69,12 +69,21 @@ export default function Dashboard() {
           .sort((a, b) => b.count - a.count)
           .slice(0, 4);
 
+        const convertToDate = (val: any) => {
+          if (!val) return null;
+          if (typeof val.toDate === 'function') return val.toDate();
+          if (val._seconds) return new Date(val._seconds * 1000);
+          if (val.seconds) return new Date(val.seconds * 1000);
+          const date = new Date(val);
+          return isNaN(date.getTime()) ? null : date;
+        };
+
         setStats({
           total: todayRequests.length,
           new: todayRequests.filter(r => r.status === "new" || !r.status).length,
           inWork: todayRequests.filter(r => r.status === "in_progress").length,
           completed: todayRequests.filter(r => r.status === "done").length,
-          recentAppeals: recent,
+          recentAppeals: todayRequests.map(r => ({ ...r, _date: convertToDate(r.createdAt) })),
           topBranches
         });
       } catch (error) {
@@ -158,10 +167,10 @@ export default function Dashboard() {
                     <div className="flex items-center gap-8 mt-6 sm:mt-0">
                       <div className="text-right hidden sm:block">
                         <p className="text-sm font-black text-[#1F2937]">
-                          {request.createdAt ? format(new Date(request.createdAt), "HH:mm") : "—"}
+                          {request._date ? format(request._date, "HH:mm") : "—"}
                         </p>
                         <p className="text-[10px] text-zinc-400 font-black uppercase tracking-[0.2em]">
-                          {request.createdAt ? format(new Date(request.createdAt), "d MMM", { locale: ru }) : "—"}
+                          {request._date ? format(request._date, "d MMM", { locale: ru }) : "—"}
                         </p>
                       </div>
                       
