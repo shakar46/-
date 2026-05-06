@@ -34,6 +34,7 @@ import { cn } from "../lib/utils";
 export default function Requests() {
   const location = useLocation();
   const [requests, setRequests] = useState<CRMRequest[]>([]);
+  const [dictionaries, setDictionaries] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Все");
@@ -47,20 +48,30 @@ export default function Requests() {
   const itemsPerPage = 10;
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  const { userRole, userData } = useFirebase();
+  const { userRole, userData, token } = useFirebase();
 
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
-      const querySnapshot = await getDocs(q);
-      let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CRMRequest));
+      const requestsQ = userRole === 'manager' && userData?.branchId
+        ? query(collection(db, "requests"), where("branchId", "==", userData.branchId), orderBy("createdAt", "desc"))
+        : query(collection(db, "requests"), orderBy("createdAt", "desc"));
+
+      const dictQ = query(collection(db, "dictionaries"));
       
-      if (userRole === 'manager' && userData?.branchId) {
-        data = data.filter(r => r.branchId === userData.branchId);
-      }
-      
+      const [requestsSnapshot, dictSnapshot] = await Promise.all([
+        getDocs(requestsQ),
+        getDocs(dictQ)
+      ]);
+
+      const data = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any } as CRMRequest));
       setRequests(data);
+
+      const dictData: Record<string, any> = {};
+      dictSnapshot.docs.forEach(doc => {
+        dictData[doc.id] = doc.data();
+      });
+      setDictionaries(dictData);
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, "requests");
     }
@@ -116,13 +127,17 @@ export default function Requests() {
       (r.id && r.id.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesStatus = statusFilter === "Все" || 
+      (statusFilter === "Новый" && (!r.status || r.status === "new")) ||
       (statusFilter === "В работе" && r.status === "in_progress") || 
-      (statusFilter === "Выполнено" && r.status === "done");
+      (statusFilter === "На проверке" && r.status === "under_review") || 
+      (statusFilter === "Выполнено" && r.status === "done") ||
+      (statusFilter === "Отменен" && r.status === "cancelled");
     
-    const matchesBranch = branchFilter === "Все" || r.branchId === branchFilter;
+    const matchesBranch = userRole === 'manager' || branchFilter === "Все" || r.branchName === branchFilter || r.branchId === branchFilter;
     const matchesClassification = classificationFilter === "Все" || r.classification === classificationFilter;
+    const matchesImportance = importanceFilter === "Все" || r.significance === importanceFilter;
 
-    return matchesSearch && matchesStatus && matchesBranch && matchesClassification;
+    return matchesSearch && matchesStatus && matchesBranch && matchesClassification && matchesImportance;
   }).sort((a, b) => {
     const valA = (a as any)[sortField];
     const valB = (b as any)[sortField];
@@ -145,6 +160,7 @@ export default function Requests() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "in_progress": return "bg-amber-50 text-amber-600 border-amber-100";
+      case "under_review": return "bg-blue-50 text-blue-600 border-blue-100";
       case "done": return "bg-emerald-50 text-emerald-600 border-emerald-100";
       default: return "bg-zinc-50 text-zinc-400 border-zinc-100";
     }
@@ -192,13 +208,15 @@ export default function Requests() {
             <Download size={18} />
             Экспорт
           </button>
-          <Link
-            to="/quick-request"
-            className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary/90 transition-all shadow-md shadow-primary/10"
-          >
-            <Plus size={18} />
-            Новое обращение
-          </Link>
+          {userRole !== 'manager' && (
+            <Link
+              to="/quick-request"
+              className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary/90 transition-all shadow-md shadow-primary/10"
+            >
+              <Plus size={18} />
+              Новое обращение
+            </Link>
+          )}
         </div>
       </header>
 
@@ -245,32 +263,35 @@ export default function Requests() {
                     <option>Все</option>
                     <option>Новый</option>
                     <option>В работе</option>
-                    <option>Выполнен</option>
+                    <option>На проверке</option>
+                    <option>Выполнено</option>
                     <option>Отменен</option>
                   </select>
                 </div>
+                {userRole !== 'manager' && (
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Филиал</label>
+                    <select 
+                      value={branchFilter}
+                      onChange={(e) => setBranchFilter(e.target.value)}
+                      className="w-full bg-zinc-50 border-white rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all shadow-sm text-[#1F2937]"
+                    >
+                      <option>Все</option>
+                      {(dictionaries.branch_names?.items || BRANCH_NAMES).map((b: string) => <option key={b}>{b}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Филиал</label>
-                  <select 
-                    value={branchFilter}
-                    onChange={(e) => setBranchFilter(e.target.value)}
-                    className="w-full bg-zinc-50 border-white rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all shadow-sm text-[#1F2937]"
-                  >
-                    <option>Все</option>
-                    {BRANCH_NAMES.map(b => <option key={b}>{b}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Степень важности</label>
+                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Значимость</label>
                   <select 
                     value={importanceFilter}
                     onChange={(e) => setImportanceFilter(e.target.value)}
                     className="w-full bg-zinc-50 border-white rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all shadow-sm text-[#1F2937]"
                   >
                     <option>Все</option>
-                    <option>Критические</option>
-                    <option>Значимые</option>
-                    <option>Незначимые</option>
+                    <option>Критическая</option>
+                    <option>Средняя</option>
+                    <option>Низкая</option>
                   </select>
                 </div>
                 <div className="flex items-end pb-3">
@@ -393,7 +414,9 @@ export default function Requests() {
                       </td>
                       <td className="px-8 py-8">
                         <div className="flex flex-col max-w-[240px]">
-                          <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">{request.branchId}</span>
+                          {userRole !== 'manager' && (
+                            <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">{request.branchId}</span>
+                          )}
                           <span className="text-sm font-black text-[#1F2937] truncate">{request.classification}</span>
                         </div>
                       </td>
@@ -402,7 +425,8 @@ export default function Requests() {
                           "inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm",
                           getStatusColor(request.status)
                         )}>
-                          {request.status === "in_progress" ? "В работе" : "Выполнено"}
+                          {request.status === "in_progress" ? "В работе" : 
+                           request.status === "under_review" ? "На проверке" : "Выполнено"}
                         </div>
                       </td>
                       <td className="px-10 py-8 text-right">

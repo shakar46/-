@@ -19,7 +19,7 @@ export const logEvent = async (params: LogParams) => {
   try {
     await addDoc(collection(db, "audit_logs"), {
       ...params,
-      timestamp: serverTimestamp(),
+      createdAt: serverTimestamp(),
     });
   } catch (error) {
     console.error("Failed to log event:", error);

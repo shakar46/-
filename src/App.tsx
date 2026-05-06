@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { HashRouter as Router, Routes, Route, Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
-  MessageSquare, 
+  MessageSquare,
+  MessageCircle,
   BarChart3, 
   FileText, 
   Table, 
@@ -23,12 +24,14 @@ import {
   LogOut,
   LogIn,
   ShieldCheck,
+  CheckCircle2,
   History,
   Zap,
   HelpCircle,
   AlertCircle,
   TrendingUp,
-  User
+  User,
+  Book
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { FirebaseProvider, useFirebase } from "./components/FirebaseProvider";
@@ -63,10 +66,14 @@ import AcceptedResolutions from "./pages/AcceptedResolutions";
 import AnalyticsDetail from "./pages/AnalyticsDetail";
 import LearningBase from "./pages/LearningBase";
 import PerformanceStats from "./pages/PerformanceStats";
+import DictionaryManagement from "./pages/DictionaryManagement";
 import { Profile } from "./pages/Profile";
 
 
 import { Login } from "./pages/Login";
+
+import GiveFeedback from "./pages/GiveFeedback";
+
 
 const PageTransition = ({ children }: { children: React.ReactNode }) => (
   <motion.div
@@ -110,29 +117,43 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, userRole, userData, isAuthorized, loading: firebaseLoading, logout } = useFirebase();
 
-  const menuItems = [
-    { to: "/", icon: LayoutDashboard, label: "Обзор" },
-    { to: "/requests", icon: MessageSquare, label: "Запросы" },
-  ];
+  const menuItems = [];
+  
+  // Dashboard for all except Operator
+  if (userRole !== 'operator') {
+    menuItems.push({ to: "/", icon: LayoutDashboard, label: "Обзор" });
+  }
+
+  // Requests for all
+  menuItems.push({ to: "/requests", icon: MessageSquare, label: "Запросы" });
 
   // Новое (Quick Request) for Admin, Owner, Operator, Head
   if (userRole === 'owner' || userRole === 'admin' || userRole === 'operator' || userRole === 'head') {
     menuItems.push({ to: "/quick-request", icon: Plus, label: "Новое" });
   }
 
-  // Повторы (Repeating) for all
-  menuItems.push({ to: "/repeating", icon: Users, label: "Повторы" });
+  // Повторы (Repeating) for all except Operator
+  if (userRole !== 'operator') {
+    menuItems.push({ to: "/repeating", icon: Users, label: "Повторы" });
+  }
 
-  // Решения, Скрипты, База обучения for Owner, Admin, Head
-  if (userRole === 'owner' || userRole === 'admin' || userRole === 'head') {
-    menuItems.push({ to: "/resolutions", icon: ShieldCheck, label: "Решения" });
+  // Решения, Скрипты, База обучения for Owner, Admin, Head, Operator
+  if (userRole === 'owner' || userRole === 'admin' || userRole === 'head' || userRole === 'operator') {
+    if (userRole !== 'operator') {
+      menuItems.push({ to: "/resolutions", icon: ShieldCheck, label: "Решения" });
+    }
     menuItems.push({ to: "/scripts", icon: Zap, label: "Скрипты" });
     menuItems.push({ to: "/learning-base", icon: FileText, label: "База обучения" });
   }
 
-  // Аналитика for Owner, Admin, Manager, Viewer
-  if (userRole !== 'operator') {
+  // Аналитика for Admin, Operator, Owner
+  if (userRole === 'admin' || userRole === 'operator' || userRole === 'owner') {
     menuItems.push({ to: "/analytics", icon: BarChart3, label: "Аналитика" });
+  }
+
+  // Дать ОС по отзыву for Manager
+  if (userRole === 'manager') {
+    menuItems.push({ to: "/give-feedback", icon: MessageCircle, label: "Дать ОС" });
   }
 
   // Профиль, Инфо for all
@@ -144,13 +165,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     menuItems.push({ to: "/performance", icon: TrendingUp, label: "Продуктивность" });
   }
 
-  // Команда (Users) for Owner, Admin, Manager, Head
-  if (userRole === "admin" || userRole === "owner" || userRole === 'manager' || userRole === 'head') {
+  // Команда (Users) for Owner, Admin, Head
+  if (userRole === "admin" || userRole === "owner" || userRole === 'head') {
     menuItems.push({ to: "/users", icon: Users, label: "Команда" });
   }
 
-  // Настройки for Owner, Admin, Head
+  // Настройки and Справочники for Owner, Admin, Head
   if (userRole === "admin" || userRole === "owner" || userRole === "head") {
+    menuItems.push({ to: "/dictionaries", icon: Book, label: "Справочники" });
     menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
   }
 
@@ -345,8 +367,10 @@ export default function App() {
               <Route path="/scripts" element={<PageTransition><Scripts /></PageTransition>} />
               <Route path="/learning-base" element={<PageTransition><LearningBase /></PageTransition>} />
               <Route path="/performance" element={<PageTransition><PerformanceStats /></PageTransition>} />
+              <Route path="/dictionaries" element={<PageTransition><DictionaryManagement /></PageTransition>} />
               <Route path="/profile" element={<PageTransition><Profile /></PageTransition>} />
               <Route path="/how-to" element={<PageTransition><HowTo /></PageTransition>} />
+              <Route path="/give-feedback" element={<PageTransition><GiveFeedback /></PageTransition>} />
               <Route path="/form" element={<PublicForm />} />
             </Routes>
           </Layout>

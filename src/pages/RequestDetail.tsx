@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
+  Plus,
+  History as HistoryIcon,
   ChevronLeft, 
   Check, 
   User, 
@@ -13,49 +15,80 @@ import {
   FileText,
   Trash2,
   Save,
-  AlertCircle
+  AlertCircle,
+  Edit,
+  Layers,
+  Image as ImageIcon,
+  Mic,
+  ArrowRight,
+  Info,
+  X
 } from "lucide-react";
-import { doc, getDoc, collection, query, where, orderBy, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, orderBy, getDocs, updateDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useFirebase } from "../components/FirebaseProvider";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { cn } from "../lib/utils";
-import { CRMRequest, RequestAction } from "../types";
+import { CRMRequest, Dictionary } from "../types";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { convertToDate, safeFormat } from "../utils/dateUtils";
+import { SearchableSelect, SearchableMultiSelect } from "../components/SearchableSelect";
 
-export default function AppealDetail() {
+export default function RequestDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, userRole, token } = useFirebase();
+  
   const [request, setRequest] = useState<CRMRequest | null>(null);
-  const [actions, setActions] = useState<RequestAction[]>([]);
+  const [dictionaries, setDictionaries] = useState<Record<string, Dictionary>>({});
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("general");
+  const [sidebarActions, setSidebarActions] = useState<any[]>([]);
+  
+  // Image Viewer state
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+
+  // Processing state
   const [processing, setProcessing] = useState(false);
   const [resolution, setResolution] = useState("");
   const [instantFix, setInstantFix] = useState("");
+  const [classificationConfirmed, setClassificationConfirmed] = useState("");
 
-  const fetchRequestData = async () => {
-    if (!id || id === 'new') {
-      setLoading(false);
-      return;
-    }
+  // Local state for all fields (to allow editing)
+  const [formData, setFormData] = useState<Partial<CRMRequest>>({});
+
+  useEffect(() => {
+    fetchData();
+  }, [id]);
+
+  const fetchData = async () => {
+    if (!id) return;
     setLoading(true);
     try {
+      // Fetch Request
       const docSnap = await getDoc(doc(db, "requests", id));
       if (docSnap.exists()) {
-        setRequest({ id: docSnap.id, ...docSnap.data() } as CRMRequest);
-        
-        // Fetch actions
-        const actionsQuery = query(
-          collection(db, "request_actions"),
-          where("requestId", "==", id),
-          orderBy("createdAt", "desc")
-        );
-        const actionsSnap = await getDocs(actionsQuery);
-        setActions(actionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RequestAction)));
+        const data = docSnap.id === 'new' ? {} : { id: docSnap.id, ...docSnap.data() } as CRMRequest;
+        setRequest(data as CRMRequest);
+        setFormData(data);
+      }
+
+      // Fetch Dictionaries
+      const dictSnap = await getDocs(collection(db, "dictionaries"));
+      const dictData: Record<string, Dictionary> = {};
+      dictSnap.docs.forEach(doc => {
+        dictData[doc.id] = { id: doc.id, ...doc.data() } as Dictionary;
+      });
+      setDictionaries(dictData);
+
+      // Fetch Actions for right sidebar/history
+      if (id !== 'new') {
+        fetchActions();
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.GET, `requests/${id}`);
@@ -63,9 +96,16 @@ export default function AppealDetail() {
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchRequestData();
-  }, [id]);
+  const fetchActions = async () => {
+    if (!id) return;
+    const actionsQuery = query(
+      collection(db, "request_actions"),
+      where("requestId", "==", id),
+      orderBy("createdAt", "desc")
+    );
+    const actionsSnap = await getDocs(actionsQuery);
+    setSidebarActions(actionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+  };
 
   const handleProcess = async () => {
     if (!resolution) return alert("Введите решение");
@@ -80,14 +120,23 @@ export default function AppealDetail() {
         body: JSON.stringify({
           requestId: id,
           instantFix,
-          resolution
+          resolution,
+          classificationConfirmed: classificationConfirmed || `${formData.classification} / ${formData.classificationSection}`
         })
       });
       const result = await response.json();
       if (result.success) {
         setResolution("");
         setInstantFix("");
-        fetchRequestData();
+        setClassificationConfirmed("");
+        fetchActions();
+        // Update local request data if status changed
+        const docSnap = await getDoc(doc(db, "requests", id!));
+        if (docSnap.exists()) {
+          const newData = { id: docSnap.id, ...docSnap.data() } as CRMRequest;
+          setRequest(newData);
+          setFormData(newData);
+        }
       } else {
         alert(result.error);
       }
@@ -111,7 +160,12 @@ export default function AppealDetail() {
       });
       const result = await response.json();
       if (result.success) {
-        fetchRequestData();
+        const docSnap = await getDoc(doc(db, "requests", id!));
+        if (docSnap.exists()) {
+          const newData = { id: docSnap.id, ...docSnap.data() } as CRMRequest;
+          setRequest(newData);
+          setFormData(newData);
+        }
       } else {
         alert(result.error);
       }
@@ -121,197 +175,753 @@ export default function AppealDetail() {
     setProcessing(false);
   };
 
-  if (loading) return <div className="p-20 text-center font-bold text-zinc-400">Загрузка...</div>;
-  if (!request && id !== 'new') return <div className="p-20 text-center font-bold text-zinc-400">Обращение не найдено</div>;
+  const handleSaveField = async (field: keyof CRMRequest, value: any) => {
+    if (!id || id === 'new') return;
+    setFormData(prev => ({ ...prev, [field]: value }));
+    try {
+      await updateDoc(doc(db, "requests", id), {
+        [field]: value,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `requests/${id}`);
+    }
+  };
+
+  const handleBulkSave = async () => {
+    if (!id || id === 'new') return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "requests", id), {
+        ...formData,
+        updatedAt: new Date().toISOString()
+      });
+      alert("Данные успешно сохранены");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `requests/${id}`);
+    }
+    setSaving(false);
+  };
+
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+
+  const handleAIAnalyze = async () => {
+    if (!formData.message) return alert("Введите текст обращения для анализа");
+    setAiAnalyzing(true);
+    try {
+      const response = await fetch("/api/ai/analyze-root-cause", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          message: formData.message,
+          classification: formData.classification,
+          section: formData.classificationSection
+        })
+      });
+      const result = await response.json();
+      if (result.analysis) {
+        setFormData(prev => ({ 
+          ...prev, 
+          rootCauseAnalysis: result.analysis,
+          correctiveActions: result.recommendation 
+        }));
+      }
+    } catch (error) {
+      console.error("AI analysis error:", error);
+    }
+    setAiAnalyzing(false);
+  };
+
+  const canEditMainInfo = ['admin', 'owner', 'head', 'operator'].includes(userRole || "");
+  const canEditProcessing = ['admin', 'owner', 'head', 'manager'].includes(userRole || "");
+  const canEditAnalytics = ['admin', 'operator'].includes(userRole || "");
+  const isOperatorOnly = userRole === 'operator';
+
+  if (loading) return <div className="p-20 text-center font-bold text-zinc-400">Загрузка карточки...</div>;
+  if (!request) return <div className="p-20 text-center font-bold text-zinc-400">Обращение не найдено</div>;
+
+  const TABS = [
+    { id: "general", label: "Основная", icon: Info },
+    { id: "evidence", label: "Подтверждение", icon: ImageIcon },
+    { id: "processing", label: "Обработка", icon: Zap },
+    { id: "analytics", label: "Аналитика", icon: FileText }
+  ];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-20 pt-10">
-      <header className="flex items-center justify-between">
-        <button 
-          onClick={() => navigate("/requests")}
-          className="flex items-center gap-2 text-zinc-500 hover:text-black font-bold transition-colors"
-        >
-          <ChevronLeft size={20} /> Назад
-        </button>
+    <div className="max-w-7xl mx-auto space-y-10 pb-32 pt-10 px-4 lg:px-8">
+      {/* Header */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => navigate("/requests")}
+            className="p-3 bg-white border border-zinc-100 rounded-2xl text-zinc-400 hover:text-black hover:border-zinc-200 transition-all shadow-sm"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-3xl font-black tracking-tight text-zinc-900">
+                Обращение #{id.slice(0, 6)}
+              </h1>
+              <div className={cn(
+                "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
+                request?.status === 'done' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                request?.status === 'under_review' ? "bg-blue-50 text-blue-600 border-blue-100" :
+                "bg-amber-50 text-amber-600 border-amber-100"
+              )}>
+                {request?.status === 'in_progress' ? "В работе" : 
+                 request?.status === 'under_review' ? "На проверке" : "Выполнено"}
+              </div>
+            </div>
+            <p className="text-zinc-400 font-bold text-xs uppercase tracking-widest">
+              Создано: {safeFormat(request?.createdAt, "dd.MM.yyyy HH:mm")}
+            </p>
+          </div>
+        </div>
+
         <div className="flex items-center gap-3">
-          {request?.status === 'in_progress' && (userRole === 'manager' || userRole === 'admin' || userRole === 'owner') && (
+          {request?.status === 'in_progress' && (userRole === 'admin' || userRole === 'owner' || userRole === 'head') && (
             <button 
               onClick={handleComplete}
               disabled={processing}
-              className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+              className="flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50"
             >
               <Check size={20} /> Завершить обращение
             </button>
           )}
+          <button 
+            onClick={handleBulkSave}
+            disabled={saving}
+            className="flex-1 md:flex-none flex items-center justify-center gap-3 bg-zinc-900 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-zinc-200 disabled:opacity-50"
+          >
+            <Save size={18} />
+            {saving ? "Сохранение..." : "Сохранить изменения"}
+          </button>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          {/* Request Header Info */}
-          <section className="bg-white p-8 rounded-3xl border border-zinc-100 shadow-sm">
-            <div className="flex items-start justify-between mb-8">
-              <div className="flex items-center gap-5">
-                <div className="w-20 h-20 bg-zinc-50 rounded-3xl flex items-center justify-center p-1 border border-zinc-100">
-                  {request?.clientPhoto ? (
-                    <img src={request.clientPhoto} className="w-full h-full object-cover rounded-[1.25rem]" />
-                  ) : (
-                    <User size={32} className="text-zinc-200" />
-                  )}
-                </div>
-                <div>
-                  <h1 className="text-2xl font-black text-zinc-900 leading-tight mb-1">{request?.clientName}</h1>
-                  <p className="text-zinc-400 font-bold text-sm tracking-wide">{request?.clientPhone}</p>
-                </div>
-              </div>
-              <div className={cn(
-                "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border",
-                request?.status === 'in_progress' ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-emerald-50 text-emerald-600 border-emerald-100"
-              )}>
-                {request?.status === 'in_progress' ? "В работе" : "Выполнено"}
-              </div>
-            </div>
+      {/* Tabs Navigation */}
+      <nav className="flex gap-2 bg-white p-2 rounded-[2rem] border border-zinc-100 shadow-sm overflow-x-auto no-scrollbar">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "flex items-center gap-3 px-8 py-4 rounded-3xl font-black text-xs uppercase tracking-widest whitespace-nowrap transition-all",
+              activeTab === tab.id 
+                ? "bg-zinc-900 text-white shadow-xl" 
+                : "text-zinc-400 hover:bg-zinc-50"
+            )}
+          >
+            <tab.icon size={18} />
+            {tab.label}
+          </button>
+        ))}
+      </nav>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-8 border-t border-zinc-50">
-              <div>
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Филиал</p>
-                <p className="text-sm font-bold text-zinc-900">{request?.branchId}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Классификация</p>
-                <p className="text-sm font-bold text-zinc-900">{request?.classification}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Дедлайн</p>
-                <p className="text-sm font-bold text-zinc-900">
-                  {safeFormat(request?.deadlineAt, "dd MMM, HH:mm")}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Создано</p>
-                <p className="text-sm font-bold text-zinc-900">
-                  {safeFormat(request?.createdAt, "dd.MM.yyyy HH:mm")}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Message Section */}
-          <section className="bg-white p-8 rounded-3xl border border-zinc-100 shadow-sm">
-            <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 px-1">Суть обращения</h2>
-            <div className="bg-zinc-50 p-6 rounded-2xl border border-zinc-100 italic text-zinc-700 leading-relaxed">
-              "{request?.message}"
-            </div>
-          </section>
-
-          {/* Actions Timeline */}
-          <section className="space-y-6 px-1">
-            <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">История действий</h2>
-            <div className="space-y-4">
-              {actions.map(action => (
-                <motion.div 
-                  key={action.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="bg-white p-6 rounded-2xl border border-zinc-100 shadow-sm relative overflow-hidden"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-2">
-                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                         <Zap size={14} fill="currentColor" />
-                       </div>
-                       <span className="text-xs font-black text-zinc-900 uppercase">Менеджер #{action.createdBy ? action.createdBy.slice(0, 4) : "????"}</span>
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-10">
+        <div className="lg:col-span-3 space-y-10">
+          <AnimatePresence mode="wait">
+            {activeTab === 'general' && (
+              <motion.div
+                key="general"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-10"
+              >
+                {/* Basic Info Group */}
+                <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
+                      <User size={20} />
                     </div>
-                    <span className="text-[10px] font-bold text-zinc-400">{safeFormat(action.createdAt, "dd.MM.yyyy HH:mm")}</span>
+                    <h2 className="text-xl font-black text-zinc-900">Основная информация</h2>
                   </div>
-                  
-                  {action.instantFix && (
-                    <div className="mb-4">
-                      <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">Мгновенное исправление</p>
-                      <p className="text-sm font-medium text-zinc-600">{action.instantFix}</p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Дата создание</label>
+                      <div className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold text-zinc-500">
+                        {safeFormat(request?.createdAt, "dd.MM.yyyy HH:mm:ss")}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Имя потребителя</label>
+                      <input 
+                        disabled={!canEditMainInfo}
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all disabled:opacity-50"
+                        value={formData.clientName || ""}
+                        onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                        placeholder="Введите имя..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Телефон</label>
+                      <input 
+                        disabled={!canEditMainInfo}
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all disabled:opacity-50"
+                        value={formData.clientPhone || ""}
+                        onChange={(e) => setFormData({ ...formData, clientPhone: e.target.value })}
+                        placeholder="+998..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Дата поступления</label>
+                      <input 
+                        type="datetime-local"
+                        disabled={!canEditMainInfo}
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all disabled:opacity-50"
+                        value={formData.dateReceived || ""}
+                        onChange={(e) => setFormData({ ...formData, dateReceived: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Дата заказа</label>
+                      <input 
+                        type="date"
+                        disabled={!canEditMainInfo}
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all disabled:opacity-50"
+                        value={formData.orderDate || ""}
+                        onChange={(e) => setFormData({ ...formData, orderDate: e.target.value })}
+                      />
+                    </div>
+                    <SearchableSelect 
+                      label="Источник"
+                      disabled={!canEditMainInfo}
+                      options={dictionaries.sources?.items || []}
+                      value={formData.source || ""}
+                      onChange={(val) => setFormData({ ...formData, source: val })}
+                    />
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Чек заказа</label>
+                      <input 
+                        disabled={!canEditMainInfo}
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all disabled:opacity-50"
+                        value={formData.orderCheck || ""}
+                        onChange={(e) => setFormData({ ...formData, orderCheck: e.target.value })}
+                        placeholder="Номер чека..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <SearchableSelect 
+                      label="Филиал"
+                      disabled={!canEditMainInfo}
+                      options={dictionaries.branch_names?.items || []}
+                      value={formData.branchName || ""}
+                      onChange={(val) => setFormData({ ...formData, branchName: val })}
+                    />
+                  </div>
+                </section>
+
+                {/* Classification Section */}
+                <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
+                      <Layers size={20} />
+                    </div>
+                    <h2 className="text-xl font-black text-zinc-900">Классификация</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <SearchableSelect 
+                      label="Классификация жалобы *"
+                      disabled={!canEditMainInfo}
+                      options={dictionaries.classification?.items || []}
+                      value={formData.classification || ""}
+                      onChange={(val) => setFormData({ ...formData, classification: val, classificationSection: "" })}
+                    />
+                    <SearchableSelect 
+                      label="Раздел классификации *"
+                      disabled={!canEditMainInfo}
+                      options={dictionaries.sections?.groups?.find(g => g.name === formData.classification)?.items || []}
+                      value={formData.classificationSection || ""}
+                      onChange={(val) => setFormData({ ...formData, classificationSection: val })}
+                      placeholder="Выберите раздел..."
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Краткое описание обращения *</label>
+                    <textarea 
+                      disabled={!canEditMainInfo}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all min-h-[160px] resize-none disabled:opacity-50"
+                      value={formData.message || ""}
+                      onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                      placeholder="Опишите суть проблемы..."
+                    />
+                  </div>
+
+                  <SearchableMultiSelect 
+                    label="Прилагательный комментарий (Справочник)"
+                    disabled={!canEditMainInfo}
+                    options={dictionaries.adjective_comments?.groups || []}
+                    value={formData.additionalComment ? formData.additionalComment.split(',').filter(Boolean) : []}
+                    onChange={(val) => setFormData({ ...formData, additionalComment: val.join(',') })}
+                  />
+                </section>
+
+                {/* Product Section */}
+                {!isOperatorOnly && (
+                  <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
+                    <SearchableMultiSelect 
+                      label="Продукт / Сотрудник (Справочник)"
+                      disabled={!canEditProcessing}
+                      options={dictionaries.products_employees?.groups || []}
+                      value={formData.productEmployee || []}
+                      onChange={(val) => setFormData({ ...formData, productEmployee: val })}
+                    />
+                  </section>
+                )}
+              </motion.div>
+            )}
+
+            {activeTab === 'evidence' && (
+              <motion.div
+                key="evidence"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-10"
+              >
+                <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
+                      <ImageIcon size={20} />
+                    </div>
+                    <h2 className="text-xl font-black text-zinc-900">Подтверждающая информация</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Потребительские фото (от клиента)</label>
+                        <div className="grid grid-cols-2 gap-4">
+                          {formData.clientPhotos?.map((url, idx) => (
+                            <div key={idx} className="relative group cursor-pointer" onClick={() => setSelectedImage(url)}>
+                              <img src={url} className="w-full h-32 object-cover rounded-2xl border border-zinc-100 shadow-sm" referrerPolicy="no-referrer" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Образец / Фото перепроверки</label>
+                        <div className="grid grid-cols-2 gap-4">
+                          {formData.samplePhotoEvidence?.map((url, idx) => (
+                            <div key={idx} className="relative group cursor-pointer" onClick={() => setSelectedImage(url)}>
+                              <img src={url} className="w-full h-32 object-cover rounded-2xl border border-zinc-100 shadow-sm" referrerPolicy="no-referrer" />
+                              {canEditMainInfo && (
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newUrls = [...(formData.samplePhotoEvidence || [])];
+                                    newUrls.splice(idx, 1);
+                                    setFormData({ ...formData, samplePhotoEvidence: newUrls });
+                                  }}
+                                  className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {canEditMainInfo && (
+                            <label className="h-32 border-2 border-dashed border-zinc-200 rounded-3xl flex flex-col items-center justify-center gap-2 text-zinc-400 hover:text-primary hover:border-primary transition-all cursor-pointer">
+                              <Plus size={24} />
+                              <span className="text-[8px] font-black uppercase tracking-widest text-center px-2">Загрузить</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    // Normally we would upload to Firebase Storage, for now using base64 for demo/simplicity
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      const newUrls = [...(formData.samplePhotoEvidence || []), reader.result as string];
+                                      setFormData({ ...formData, samplePhotoEvidence: newUrls });
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">SIP-аудиозапись (Ссылка)</label>
+                      <div className="flex items-center gap-3 bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+                        <Mic className="text-zinc-400" size={20} />
+                        <input 
+                          disabled={!canEditMainInfo}
+                          className="bg-transparent flex-1 outline-none text-sm font-bold disabled:opacity-50"
+                          value={formData.sipAudio || ""}
+                          onChange={(e) => setFormData({ ...formData, sipAudio: e.target.value })}
+                          placeholder="https://sip.vpbx.uz/..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </motion.div>
+            )}
+
+            {activeTab === 'processing' && (
+              <motion.div
+                key="processing"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-10"
+              >
+                <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
+                      <Zap size={20} />
+                    </div>
+                    <h2 className="text-xl font-black text-zinc-900">Распределение и обработка</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Кто принял жалобу</label>
+                      <input 
+                        disabled={!canEditMainInfo}
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none disabled:opacity-50"
+                        value={formData.complaintTaker || ""}
+                        onChange={(e) => setFormData({ ...formData, complaintTaker: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Ответственный за коррекцию</label>
+                      <input 
+                        disabled={!canEditProcessing}
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none disabled:opacity-50"
+                        value={formData.responsibleForCorrection || ""}
+                        onChange={(e) => setFormData({ ...formData, responsibleForCorrection: e.target.value })}
+                      />
+                    </div>
+                    <SearchableSelect 
+                      label="Срок устранения"
+                      disabled={!canEditProcessing}
+                      options={dictionaries.deadline_statuses?.items || []}
+                      value={formData.deadlineStatus || ""}
+                      onChange={(val) => setFormData({ ...formData, deadlineStatus: val })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Моментальная коррекция</label>
+                    <textarea 
+                      disabled={!canEditProcessing}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[120px] disabled:opacity-50"
+                      value={formData.instantCorrection || ""}
+                      onChange={(e) => setFormData({ ...formData, instantCorrection: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Решение (Финальное)</label>
+                    <textarea 
+                      disabled={!canEditProcessing}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[150px] disabled:opacity-50"
+                      value={formData.finalResolution || ""}
+                      onChange={(e) => setFormData({ ...formData, finalResolution: e.target.value })}
+                    />
+                  </div>
+                </section>
+              </motion.div>
+            )}
+
+            {activeTab === 'analytics' && (
+              <motion.div
+                key="analytics"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-10"
+              >
+                <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
+                        <FileText size={20} />
+                      </div>
+                      <h2 className="text-xl font-black text-zinc-900">Аналитика и обработка причин</h2>
+                    </div>
+                  </div>
+
+                  {/* Confirmed Classification Display */}
+                  {formData.classificationConfirmed && (
+                    <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-3xl space-y-2">
+                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Подтвержденная классификация</p>
+                      <p className="text-sm font-bold text-emerald-900">{formData.classificationConfirmed}</p>
                     </div>
                   )}
-                  
-                  <div>
-                    <p className="text-[9px] font-black text-primary uppercase tracking-widest mb-1">Решение</p>
-                    <p className="text-sm font-bold text-zinc-800 leading-relaxed">{action.resolution}</p>
+
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">
+                      Корневая причина
+                    </label>
+                    <textarea 
+                      disabled={!canEditAnalytics}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none min-h-[120px] disabled:opacity-50 focus:ring-4 focus:ring-primary/5 transition-all"
+                      value={formData.rootCauseAnalysis || ""}
+                      onChange={(e) => setFormData({ ...formData, rootCauseAnalysis: e.target.value })}
+                      placeholder="Опишите основную причину возникновения проблемы..."
+                    />
                   </div>
-                </motion.div>
-              ))}
-              {actions.length === 0 && (
-                <div className="py-12 bg-white/50 border-2 border-dashed border-zinc-100 rounded-3xl text-center text-zinc-400 text-sm font-medium italic">
-                  Действий пока не зафиксировано
-                </div>
-              )}
-            </div>
-          </section>
+ 
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-zinc-50">
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Подтверждающая информация (Фото)</label>
+                      <div className="grid grid-cols-2 gap-4">
+                        {formData.analyticsPhotos?.map((url, idx) => (
+                          <div key={idx} className="relative group cursor-pointer" onClick={() => setSelectedImage(url)}>
+                            <img src={url} className="w-full h-32 object-cover rounded-2xl border border-zinc-100 shadow-sm" referrerPolicy="no-referrer" />
+                            {canEditAnalytics && (
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newUrls = [...(formData.analyticsPhotos || [])];
+                                  newUrls.splice(idx, 1);
+                                  setFormData({ ...formData, analyticsPhotos: newUrls });
+                                }}
+                                className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {canEditAnalytics && (
+                          <label className="h-32 border-2 border-dashed border-zinc-200 rounded-3xl flex flex-col items-center justify-center gap-2 text-zinc-400 hover:text-primary hover:border-primary transition-all cursor-pointer">
+                            <Plus size={24} />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-center px-2">Загрузить фото доказательство</span>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    const newUrls = [...(formData.analyticsPhotos || []), reader.result as string];
+                                    setFormData({ ...formData, analyticsPhotos: newUrls });
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-zinc-50">
+                    <SearchableSelect 
+                      label="Статус обоснованности"
+                      disabled={!canEditAnalytics}
+                      options={["обоснованный", "не обоснованный", "выявляется"]}
+                      value={formData.validityStatus || "выявляется"}
+                      onChange={(val) => setFormData({ ...formData, validityStatus: val as any })}
+                    />
+                  </div>
+                </section>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Right Column: Processing Form */}
+
+        {/* Action Sidebar / History */}
         <aside className="space-y-8">
-          {request?.status === 'in_progress' && (userRole === 'manager' || userRole === 'admin' || userRole === 'owner') ? (
-            <section className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-xl sticky top-24">
-              <div className="mb-6">
-                 <h2 className="text-xl font-black text-zinc-900 mb-1">Действие</h2>
-                 <p className="text-zinc-500 text-xs font-medium">Зафиксируйте решение или коррекцию</p>
+          {/* Action Recording Card for Managers/Admins */}
+          {((userRole === 'manager' && request?.status === 'in_progress' && !sidebarActions.some(a => a.createdBy === user?.uid)) || 
+            (['admin', 'owner', 'head'].includes(userRole || "") && request?.status !== 'done')) && (
+            <section className="bg-white p-8 rounded-[2.5rem] border border-zinc-200 shadow-xl space-y-6">
+              <div>
+                <h3 className="text-xl font-black text-zinc-900 mb-1">Действие</h3>
+                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Зафиксируйте решение</p>
               </div>
 
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 px-1">Мгновенное исправление</label>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest ml-1">Подтвердить класс. / Раздел</label>
+                  <div className="space-y-2">
+                    <SearchableSelect 
+                      options={dictionaries.classification?.items || []}
+                      value={formData.classification || ""}
+                      onChange={(val) => setFormData({ ...formData, classification: val })}
+                      placeholder="Классификация..."
+                    />
+                    <SearchableSelect 
+                      options={dictionaries.sections?.groups?.find(g => g.name === formData.classification)?.items || []}
+                      value={classificationConfirmed || formData.classificationSection || ""}
+                      onChange={setClassificationConfirmed}
+                      placeholder="Уточните раздел..."
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest ml-1">Мгновенное исправление</label>
                   <textarea 
-                    rows={2}
-                    className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-4 focus:ring-primary/5 outline-none transition-all resize-none shadow-inner"
+                    className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-3 text-sm font-medium outline-none resize-none min-h-[80px]"
+                    placeholder="Что сделано сразу?"
                     value={instantFix}
                     onChange={(e) => setInstantFix(e.target.value)}
-                    placeholder="Что было сделано сразу?"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 px-1">Финальное решение *</label>
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest ml-1">Финальное решение *</label>
                   <textarea 
-                    rows={4}
-                    required
-                    className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-primary/5 outline-none transition-all resize-none shadow-inner"
+                    className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none resize-none min-h-[120px]"
+                    placeholder="Результат..."
                     value={resolution}
                     onChange={(e) => setResolution(e.target.value)}
-                    placeholder="Опишите результат..."
                   />
                 </div>
-
                 <button 
                   onClick={handleProcess}
                   disabled={processing || !resolution}
-                  className="w-full py-4 bg-primary text-white rounded-xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                  className="w-full py-4 bg-zinc-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-black/20 disabled:opacity-50"
                 >
-                  {processing ? "Обработка..." : "Записать действие"}
+                  {processing ? "Обработка..." : "Зафиксировать решение"}
                 </button>
               </div>
             </section>
-          ) : (
-            <section className="bg-emerald-600 p-8 rounded-3xl text-white shadow-xl shadow-emerald-200">
-               <div className="flex items-center gap-3 mb-6">
-                 <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                   <Check size={24} />
-                 </div>
-                 <h3 className="text-xl font-black">Завершено</h3>
-               </div>
-               <p className="text-emerald-50 text-sm font-medium leading-relaxed mb-6">
-                 Данное обращение успешно обработано и закрыто в системе.
-               </p>
-               <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
-                 <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Менеджер</p>
-                 <p className="text-sm font-bold">#{request?.managerId ? request.managerId.slice(0, 8) : "—"}</p>
-                 <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mt-4 mb-1">Дата закрытия</p>
-                 <p className="text-sm font-bold">
-                   {safeFormat(request?.completedAt, "dd.MM.yyyy")}
-                 </p>
-               </div>
-            </section>
           )}
+
+          <section className="bg-zinc-900 p-8 rounded-[2.5rem] text-white shadow-2xl shadow-zinc-200">
+             <h3 className="text-xl font-black mb-6 flex items-center gap-3">
+               <HistoryIcon size={20} className="text-primary" />
+               Активность
+             </h3>
+             <div className="space-y-6">
+               {sidebarActions.length > 0 ? sidebarActions.slice(0, 5).map(action => (
+                 <div key={action.id} className="relative pl-6 pb-6 border-l border-white/10 last:pb-0">
+                   <div className="absolute left-[-5px] top-0 w-[9px] h-[9px] bg-primary rounded-full shadow-[0_0_10px_rgba(255,100,0,0.5)]" />
+                   <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
+                     {safeFormat(action.createdAt, "dd.MM HH:mm")}
+                   </p>
+                   <div className="space-y-2">
+                     <p className="text-xs font-bold leading-relaxed">{action.resolution}</p>
+                     {action.classificationConfirmed && (
+                       <div className="text-[8px] font-black uppercase text-white/30 tracking-widest">
+                         Классификация: {action.classificationConfirmed}
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               )) : (
+                 <p className="text-white/20 text-xs font-bold italic">Записей пока нет</p>
+               )}
+             </div>
+          </section>
+
+          <section className="bg-white p-8 rounded-[2.5rem] border border-zinc-100 shadow-sm">
+             <div className="flex items-center gap-3 mb-6">
+                <AlertCircle className="text-zinc-300" size={24} />
+                <h3 className="text-lg font-black text-zinc-900">Статус Эскроу</h3>
+             </div>
+             <p className="text-xs text-zinc-400 font-bold uppercase tracking-[0.15em] mb-4">Текущий прогресс</p>
+             <div className="w-full h-3 bg-zinc-50 rounded-full overflow-hidden mb-6">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: request.status === 'done' ? '100%' : '65%' }}
+                  className={cn(
+                    "h-full rounded-full transition-all duration-1000",
+                    request.status === 'done' ? "bg-emerald-500" : "bg-amber-500"
+                  )}
+                />
+             </div>
+          </section>
         </aside>
       </div>
+
+      {/* Image Viewer Modal */}
+      <AnimatePresence>
+        {selectedImage && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 md:p-10"
+            onClick={() => setSelectedImage(null)}
+          >
+            <button 
+              className="absolute top-10 right-10 p-4 bg-white/10 text-white rounded-full hover:bg-white/20 transition-all z-[110]"
+              onClick={() => setSelectedImage(null)}
+            >
+              <X size={24} />
+            </button>
+            
+            <div 
+              className="relative max-w-full max-h-full overflow-hidden flex items-center justify-center cursor-zoom-in group"
+              onClick={(e) => {
+                e.stopPropagation();
+                setZoom(prev => prev === 1 ? 2.5 : 1);
+              }}
+              onMouseMove={(e) => {
+                if (zoom > 1) {
+                  const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+                  const x = ((e.clientX - left) / width) * 100;
+                  const y = ((e.clientY - top) / height) * 100;
+                  setPosition({ x, y });
+                }
+              }}
+            >
+              <img 
+                src={selectedImage} 
+                alt="Zoom view"
+                className={cn(
+                  "max-w-full max-h-[85vh] transition-transform duration-300 rounded-lg",
+                  zoom > 1 ? "scale-[2.5]" : "scale-100"
+                )}
+                style={zoom > 1 ? {
+                  transformOrigin: `${position.x}% ${position.y}%`
+                } : {}}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+const History = ({ size, className }: { size?: number, className?: string }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+    <path d="M12 7v5l4 2" />
+  </svg>
+);

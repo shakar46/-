@@ -125,24 +125,26 @@ export default function LearningBase() {
           <h1 className="text-4xl font-bold tracking-tight mb-2">База обучения</h1>
           <p className="text-zinc-500">Обучающие материалы, инструкции и полезные файлы для сотрудников.</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingItem(null);
-            setFormData({
-              title: "",
-              description: "",
-              author: user?.displayName || "",
-              fileUrl: "",
-              fileName: "",
-              category: "Общее"
-            });
-            setIsModalOpen(true);
-          }}
-          className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10"
-        >
-          <Plus size={20} />
-          Добавить материал
-        </button>
+        {userRole !== 'operator' && (
+          <button
+            onClick={() => {
+              setEditingItem(null);
+              setFormData({
+                title: "",
+                description: "",
+                author: user?.displayName || "",
+                fileUrl: "",
+                fileName: "",
+                category: "Общее"
+              });
+              setIsModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10"
+          >
+            <Plus size={20} />
+            Добавить материал
+          </button>
+        )}
       </header>
 
       <div className="relative">
@@ -172,7 +174,7 @@ export default function LearningBase() {
                   <div className="w-12 h-12 bg-zinc-50 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-black transition-colors">
                     <FileText size={24} />
                   </div>
-                  {(userRole === 'admin' || user?.uid === item.created_by) && (
+                  {userRole !== 'operator' && (userRole === 'admin' || user?.uid === item.created_by) && (
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
                         onClick={() => {

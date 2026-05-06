@@ -19,12 +19,12 @@ export default function RepeatComplaints() {
   useEffect(() => {
     const fetchAppeals = async () => {
       try {
-        const q = query(collection(db, "appeals"), orderBy("created_at", "desc"));
+        const q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
         const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAppeals(data);
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, "appeals");
+        handleFirestoreError(error, OperationType.LIST, "requests");
       }
       setLoading(false);
     };
@@ -166,7 +166,7 @@ export default function RepeatComplaints() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Link 
-                      to={`/appeals/${appeal.id}`}
+                      to={`/requests/${appeal.id}`}
                       className="p-2 text-zinc-400 hover:text-black transition-colors inline-block"
                     >
                       <ChevronRight size={18} />

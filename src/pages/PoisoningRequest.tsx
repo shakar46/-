@@ -27,7 +27,7 @@ import { BRANCH_NAMES } from "../constants";
 import { Link, useNavigate } from "react-router-dom";
 
 export default function PoisoningAppeal() {
-  const { user } = useFirebase();
+  const { user, token } = useFirebase();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
@@ -64,17 +64,44 @@ export default function PoisoningAppeal() {
     setLoading(true);
     setStatus("idle");
     try {
-      const docRef = await addDoc(collection(db, "appeals"), {
-        ...formData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+      const response = await fetch("/api/requests/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          clientName: formData.client_name,
+          clientPhone: formData.client_phone,
+          branchId: formData.branch_name,
+          message: `ЖАЛОБА НА ОТРАВЛЕНИЕ: ${formData.symptoms}. Подозрительные продукты: ${formData.suspected_ingredients}. Ели/заболели: ${formData.people_consumed}/${formData.people_symptoms}`,
+          significance: "Критическая",
+          classification: "Отравление",
+          classificationSection: "Пищевая безопасность",
+          // Extra payload for poisoning
+          poisoningDetails: {
+            symptoms: formData.symptoms,
+            duration: formData.duration,
+            peopleConsumed: formData.people_consumed,
+            peopleSymptoms: formData.people_symptoms,
+            stomachState: formData.stomach_state,
+            timeAfterConsumption: formData.time_after_consumption,
+            suspectedIngredients: formData.suspected_ingredients,
+            previousCases: formData.previous_cases,
+            medicalReport: formData.medical_report,
+            isAggressive: formData.is_aggressive
+          }
+        })
       });
+
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
       
-      const appealId = docRef.id;
+      const appealId = result.id;
       
       // Send Telegram notification
       const messageText = `🚨 <b>ОБРАЩЕНИЕ ПО ОТРАВЛЕНИЮ</b> 🚨\n\n` +
-        `🆔 ID: #${appealId.slice(0, 8)}\n` +
+        `🆔 Номер: ${result.guestNumber}\n` +
         `👤 Клиент: ${formData.client_name}\n` +
         `📞 Телефон: ${formData.client_phone}\n` +
         `📍 Филиал: ${formData.branch_name}\n\n` +
@@ -87,7 +114,7 @@ export default function PoisoningAppeal() {
         `🔄 Ранее были случаи: ${formData.previous_cases}\n` +
         `🏥 Мед. справка: ${formData.medical_report ? "Есть" : "Нет"}\n` +
         `🤬 Агрессивное состояние: ${formData.is_aggressive ? "Да" : "Нет"}\n\n` +
-        `🔗 <a href="${window.location.origin}/#/appeals/${appealId}">Открыть в CRM</a>`;
+        `🔗 <a href="${window.location.origin}/#/requests/${appealId}">Открыть в CRM</a>`;
 
       await sendTelegramMessage(messageText, 'main');
 
@@ -111,10 +138,10 @@ export default function PoisoningAppeal() {
       });
 
       setStatus("success");
-      setTimeout(() => navigate("/appeals"), 2000);
+      setTimeout(() => navigate("/requests"), 2000);
     } catch (error) {
       setStatus("error");
-      handleFirestoreError(error, OperationType.CREATE, "appeals");
+      handleFirestoreError(error, OperationType.CREATE, "requests");
     }
     setLoading(false);
   };
@@ -122,7 +149,7 @@ export default function PoisoningAppeal() {
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <header className="flex items-center gap-4">
-        <Link to="/appeals/new" className="p-2 hover:bg-zinc-100 rounded-xl transition-colors">
+        <Link to="/quick-request" className="p-2 hover:bg-zinc-100 rounded-xl transition-colors">
           <ChevronLeft size={24} />
         </Link>
         <div>

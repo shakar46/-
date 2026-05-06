@@ -56,7 +56,7 @@ export default function AnalyticsDetail() {
   useEffect(() => {
     const fetchAppeals = async () => {
       try {
-        const q = query(collection(db, "appeals"), orderBy("created_at", "desc"));
+        const q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
         let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
         
@@ -92,14 +92,20 @@ export default function AnalyticsDetail() {
         } else if (type === "justification") {
           data = data.filter(a => (a.justification_status || "Без статуса") === value);
         } else if (type === "complaint_status") {
-          data = data.filter(a => (a.complaint_status || "Незначимые") === value);
+          data = data.filter(a => (a.significance || "Низкая") === value);
         } else if (type === "status") {
-          data = data.filter(a => (a.status || "Новый") === value);
+          data = data.filter(a => {
+            const status = a.status === "done" ? "Выполнено" : 
+                          a.status === "in_progress" ? "В работе" : 
+                          a.status === "under_review" ? "На проверке" : 
+                          a.status === "cancelled" ? "Отменен" : "Новый";
+            return status === value;
+          });
         }
 
         setAppeals(data);
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, "appeals");
+        handleFirestoreError(error, OperationType.LIST, "requests");
       }
       setLoading(false);
     };
@@ -166,8 +172,8 @@ export default function AnalyticsDetail() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard title="Всего жалоб" value={appeals.length} icon={MessageSquare} />
-        <StatCard title="В работе" value={appeals.filter(a => a.status === "В работе").length} icon={AlertCircle} color="text-amber-500" />
-        <StatCard title="Выполнено" value={appeals.filter(a => a.status === "Выполнен").length} icon={Users} color="text-emerald-500" />
+        <StatCard title="В работе" value={appeals.filter(a => a.status === "in_progress").length} icon={AlertCircle} color="text-amber-500" />
+        <StatCard title="Выполнено" value={appeals.filter(a => a.status === "done").length} icon={Users} color="text-emerald-500" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -326,26 +332,26 @@ function ComplaintsTable({ data, setSelectedPhoto }: { data: any[], setSelectedP
           >
             <td 
               className="px-6 py-4 text-sm text-zinc-500 whitespace-nowrap"
-              onClick={() => navigate(`/appeals/${a.id}`)}
+              onClick={() => navigate(`/requests/${a.id}`)}
             >
               {safeFormat(a.created_at, "dd.MM.yyyy HH:mm")}
             </td>
             <td 
               className="px-6 py-4"
-              onClick={() => navigate(`/appeals/${a.id}`)}
+              onClick={() => navigate(`/requests/${a.id}`)}
             >
               <div className="text-sm font-bold">{a.client_name}</div>
               <div className="text-[10px] text-zinc-400">{a.client_phone}</div>
             </td>
             <td 
               className="px-6 py-4 text-sm font-medium"
-              onClick={() => navigate(`/appeals/${a.id}`)}
+              onClick={() => navigate(`/requests/${a.id}`)}
             >
               {a.branch_name}
             </td>
             <td 
               className="px-6 py-4"
-              onClick={() => navigate(`/appeals/${a.id}`)}
+              onClick={() => navigate(`/requests/${a.id}`)}
             >
               <span className="px-2 py-1 rounded-lg bg-zinc-100 text-[10px] font-bold text-zinc-500 uppercase">
                 {a.complaint_classification}
@@ -353,7 +359,7 @@ function ComplaintsTable({ data, setSelectedPhoto }: { data: any[], setSelectedP
             </td>
             <td 
               className="px-6 py-4 text-sm text-zinc-500 min-w-[200px] whitespace-normal"
-              onClick={() => navigate(`/appeals/${a.id}`)}
+              onClick={() => navigate(`/requests/${a.id}`)}
             >
               {a.complaint_text}
             </td>
@@ -383,14 +389,19 @@ function ComplaintsTable({ data, setSelectedPhoto }: { data: any[], setSelectedP
             </td>
             <td 
               className="px-6 py-4"
-              onClick={() => navigate(`/appeals/${a.id}`)}
+              onClick={() => navigate(`/requests/${a.id}`)}
             >
               <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${
-                a.status === "Выполнен" ? "bg-emerald-50 text-emerald-600" :
-                a.status === "В работе" ? "bg-amber-50 text-amber-600" :
+                a.status === "done" ? "bg-emerald-50 text-emerald-600" :
+                a.status === "in_progress" ? "bg-amber-50 text-amber-600" :
+                a.status === "under_review" ? "bg-blue-50 text-blue-600" :
+                a.status === "cancelled" ? "bg-red-50 text-red-600" :
                 "bg-zinc-100 text-zinc-500"
               }`}>
-                {a.status}
+                {a.status === "done" ? "Выполнено" : 
+                 a.status === "in_progress" ? "В работе" : 
+                 a.status === "under_review" ? "На проверке" : 
+                 a.status === "cancelled" ? "Отменен" : "Новый"}
               </span>
             </td>
           </tr>

@@ -75,11 +75,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           
           const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
           if (userDoc.exists()) {
-            const uData = userDoc.data();
+            const uData = { uid: fbUser.uid, ...userDoc.data() };
             setCurrentUser(fbUser);
             setToken(userToken);
             setUserData(uData);
-            setUserRole(role || uData.role);
+            setUserRole(role || (uData as any).role);
             setIsAuthorized(true);
           } else {
             console.warn("User doc not found, but Auth exists. Creating temporary profile...");

@@ -9,7 +9,7 @@
         "nickname": { "type": "string" },
         "displayName": { "type": "string" },
         "login": { "type": "string" },
-        "role": { "type": "string", "enum": ["operator", "manager", "admin", "owner", "viewer"] },
+        "role": { "type": "string", "enum": ["operator", "manager", "admin", "owner", "head", "viewer"] },
         "branchId": { "type": "string" },
         "phone": { "type": "string" },
         "photoUrl": { "type": "string" },
@@ -19,7 +19,7 @@
     },
     "CRMRequest": {
       "title": "CRM Request",
-      "description": "Client requests or complaints",
+      "description": "Client requests or complaints with expanded fields",
       "type": "object",
       "properties": {
         "clientName": { "type": "string" },
@@ -27,12 +27,38 @@
         "clientPhoto": { "type": "string" },
         "message": { "type": "string" },
         "classification": { "type": "string" },
-        "status": { "type": "string", "enum": ["in_progress", "done"] },
+        "classificationSection": { "type": "string" },
+        "status": { "type": "string", "enum": ["in_progress", "done", "under_review"] },
         "managerId": { "type": "string" },
         "branchId": { "type": "string" },
+        "branchName": { "type": "string" },
         "deadlineAt": { "type": "string", "format": "date-time" },
         "completedAt": { "type": "string", "format": "date-time" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "dateReceived": { "type": "string", "format": "date-time" },
+        "orderDate": { "type": "string" },
+        "additionalComment": { "type": "string" },
+        "productEmployee": { "type": "array", "items": { "type": "string" } },
+        "orderCheck": { "type": "string" },
+        "briefDescription": { "type": "string" },
+        "source": { "type": "string" },
+        "samplePhotoEvidence": { "type": "array", "items": { "type": "string" } },
+        "extraPhoto": { "type": "array", "items": { "type": "string" } },
+        "complaintTaker": { "type": "string" },
+        "sipAudio": { "type": "string" },
+        "responsibleForCorrection": { "type": "string" },
+        "deadlineStatus": { "type": "string" },
+        "instantCorrection": { "type": "string" },
+        "finalResolution": { "type": "string" },
+        "rootCauseAnalysis": { "type": "string" },
+        "motivationStatus": { "type": "array", "items": { "type": "string" } },
+        "correctiveActions": { "type": "string" },
+        "significance": { "type": "string" },
+        "confirmedClassification": { "type": "string" },
+        "confirmedSection": { "type": "string" },
+        "confirmedMotivationDept": { "type": "string" },
+        "validityStatus": { "type": "string", "enum": ["обоснованный", "не обоснованный", "выявляется"] }
       },
       "required": ["clientName", "clientPhone", "message", "status", "branchId", "createdAt"]
     },
@@ -49,18 +75,24 @@
       },
       "required": ["requestId", "resolution", "createdBy", "createdAt"]
     },
-    "SystemLog": {
-      "title": "System Log",
-      "description": "Audit trail of actions in the system",
+    "Dictionary": {
+      "title": "Dictionary",
+      "description": "System-wide dropdown values and groups",
       "type": "object",
       "properties": {
-        "userId": { "type": "string" },
-        "action": { "type": "string" },
-        "entityType": { "type": "string" },
-        "entityId": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["userId", "action", "createdAt"]
+        "name": { "type": "string" },
+        "items": { "type": "array", "items": { "type": "string" } },
+        "groups": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "items": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
     }
   },
   "firestore": {
@@ -72,13 +104,13 @@
       "schema": "CRMRequest",
       "description": "List of CRM requests"
     },
-    "/requestActions/{actionId}": {
+    "/request_actions/{actionId}": {
       "schema": "RequestAction",
       "description": "Actions carried out on requests"
     },
-    "/logs/{logId}": {
-      "schema": "SystemLog",
-      "description": "Audit logs"
+    "/dictionaries/{dictId}": {
+      "schema": "Dictionary",
+      "description": "System dictionaries"
     }
   }
 }

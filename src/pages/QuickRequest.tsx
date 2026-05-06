@@ -35,7 +35,8 @@ export default function QuickRequest() {
     branch_name: BRANCH_NAMES[0],
     complaint_text: "",
     complaint_photos: [] as string[],
-    complaint_status: "Незначимые" as any,
+    complaint_status: "Средняя" as any,
+    orderCheck: "",
   });
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,26 +45,35 @@ export default function QuickRequest() {
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setLoading(true);
       try {
         const options = {
           maxSizeMB: 0.5,
           maxWidthOrHeight: 1024,
           useWebWorker: true
         };
-        const compressedFile = await imageCompression(file, options);
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setFormData(prev => ({
-            ...prev,
-            complaint_photos: [...prev.complaint_photos, reader.result as string]
-          }));
-        };
-        reader.readAsDataURL(compressedFile);
+        
+        const newPhotos: string[] = [];
+        for (let i = 0; i < files.length; i++) {
+          const compressedFile = await imageCompression(files[i], options);
+          const reader = new FileReader();
+          const photoData = await new Promise<string>((resolve) => {
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(compressedFile);
+          });
+          newPhotos.push(photoData);
+        }
+
+        setFormData(prev => ({
+          ...prev,
+          complaint_photos: [...prev.complaint_photos, ...newPhotos]
+        }));
       } catch (error) {
         console.error("Error compressing image:", error);
       }
+      setLoading(false);
     }
   };
 
@@ -88,10 +98,11 @@ export default function QuickRequest() {
         body: JSON.stringify({
           clientName: formData.client_name,
           clientPhone: formData.client_phone,
-          clientPhoto: formData.complaint_photos.length > 0 ? formData.complaint_photos[0] : null,
+          clientPhotos: formData.complaint_photos,
           message: formData.complaint_text,
-          classification: formData.complaint_status,
-          branchId: formData.branch_name
+          significance: formData.complaint_status,
+          branchId: formData.branch_name,
+          orderCheck: formData.orderCheck
         })
       });
 
@@ -107,7 +118,8 @@ export default function QuickRequest() {
         branch_name: BRANCH_NAMES[0],
         complaint_text: "",
         complaint_photos: [],
-        complaint_status: "Незначимые",
+        complaint_status: "Средняя",
+        orderCheck: "",
       });
     } catch (error: any) {
       console.error("Error creating request:", error);
@@ -137,14 +149,16 @@ export default function QuickRequest() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-                <Flag size={12} /> Статус жалобы
+                <Flag size={12} /> Значимость
               </label>
               <select
                 value={formData.complaint_status}
                 onChange={(e) => setFormData({ ...formData, complaint_status: e.target.value as any })}
                 className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 text-lg outline-none focus:ring-4 focus:ring-black/5 focus:border-black transition-all appearance-none"
               >
-                {COMPLAINT_STATUSES.map(s => <option key={s}>{s}</option>)}
+                <option>Критическая</option>
+                <option>Средняя</option>
+                <option>Низкая</option>
               </select>
             </div>
 
@@ -188,6 +202,19 @@ export default function QuickRequest() {
                 placeholder="998901234567"
               />
             </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                <FileText size={12} /> Чек (номер)
+              </label>
+              <input
+                type="text"
+                value={formData.orderCheck}
+                onChange={(e) => setFormData({ ...formData, orderCheck: e.target.value })}
+                className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 text-lg outline-none focus:ring-4 focus:ring-black/5 focus:border-black transition-all"
+                placeholder="Номер чека..."
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -224,7 +251,7 @@ export default function QuickRequest() {
               <label className="aspect-square rounded-2xl border-2 border-dashed border-zinc-200 flex flex-col items-center justify-center gap-2 text-zinc-400 hover:border-black hover:text-black transition-all cursor-pointer">
                 <Camera size={24} />
                 <span className="text-[10px] font-bold uppercase tracking-widest">Добавить</span>
-                <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                <input type="file" multiple accept="image/*" onChange={handlePhotoUpload} className="hidden" />
               </label>
             </div>
           </div>

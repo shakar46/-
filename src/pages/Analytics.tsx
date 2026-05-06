@@ -155,22 +155,31 @@ export default function Analytics() {
   const [motivationFilters, setMotivationFilters] = useState<string[]>([]);
   const [importanceFilter, setImportanceFilter] = useState("Все");
 
+  const [dictionaries, setDictionaries] = useState<Record<string, any>>({});
   const { userRole, userData } = useFirebase();
 
   useEffect(() => {
-    const fetchRequests = async () => {
+    const fetchData = async () => {
       try {
         const requestsQ = query(collection(db, "requests"), orderBy("createdAt", "desc"));
         const actionsQ = query(collection(db, "request_actions"), orderBy("createdAt", "desc"));
+        const dictQ = query(collection(db, "dictionaries"));
         
-        const [requestsSnapshot, actionsSnapshot] = await Promise.all([
+        const [requestsSnapshot, actionsSnapshot, dictSnapshot] = await Promise.all([
           getDocs(requestsQ),
-          getDocs(actionsQ)
+          getDocs(actionsQ),
+          getDocs(dictQ)
         ]);
 
         let requestsData = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         let actionsData = actionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
+        const dictData: Record<string, any> = {};
+        dictSnapshot.docs.forEach(doc => {
+          dictData[doc.id] = doc.data();
+        });
+        setDictionaries(dictData);
+
         if (userRole === 'manager' && userData?.branchId) {
           requestsData = requestsData.filter((r: any) => r.branchId === userData.branchId);
           // Filter actions to only those belonging to the filtered requests
@@ -185,7 +194,7 @@ export default function Analytics() {
       }
       setLoading(false);
     };
-    fetchRequests();
+    fetchData();
   }, []);
 
   const getFilteredData = (targetRequests = requests, targetPeriod = period, targetStart = startDate, targetEnd = endDate) => {
@@ -215,14 +224,18 @@ export default function Analytics() {
     }
 
     if (statusFilter !== "Все") {
-      const mappedStatus = statusFilter === "В работе" ? "in_progress" : statusFilter === "Выполнено" ? "done" : statusFilter;
-      filtered = filtered.filter(r => r.status === mappedStatus);
+      const mappedStatus = statusFilter === "В работе" ? "in_progress" : 
+                          statusFilter === "На проверке" ? "under_review" :
+                          statusFilter === "Выполнен" ? "done" : 
+                          statusFilter === "Новый" ? "new" :
+                          statusFilter === "Отменен" ? "cancelled" : statusFilter;
+      filtered = filtered.filter(r => (r.status || "new") === mappedStatus);
     }
     if (branchFilter !== "Все") filtered = filtered.filter(r => r.branchId === branchFilter);
     if (classificationFilters.length > 0) {
       filtered = filtered.filter(r => classificationFilters.includes(r.classification));
     }
-    // Section and motivation filters might need more mapping or data migration
+    if (importanceFilter !== "Все") filtered = filtered.filter(r => r.significance === importanceFilter);
     
     return filtered;
   };
@@ -562,6 +575,7 @@ export default function Analytics() {
     return Object.entries(counts).map(([name, value]) => {
       let label = name;
       if (name === "in_progress") label = "В работе";
+      else if (name === "under_review") label = "На проверке";
       else if (name === "done") label = "Выполнено";
       else if (name === "new") label = "Новый";
       else if (name === "cancelled") label = "Отменен";
@@ -673,6 +687,7 @@ export default function Analytics() {
                 <option>Все</option>
                 <option>Новый</option>
                 <option>В работе</option>
+                <option>На проверке</option>
                 <option>Выполнен</option>
                 <option>Отменен</option>
               </select>
@@ -690,38 +705,46 @@ export default function Analytics() {
                 disabled={userRole === 'manager'}
               >
                 <option>Все</option>
-                {BRANCH_NAMES.map(b => <option key={b}>{b}</option>)}
+                {(dictionaries.branch_names?.items || BRANCH_NAMES).map((b: string) => <option key={b}>{b}</option>)}
               </select>
             </div>
 
             <MultiSelectFilter 
               label="Категория"
               values={classificationFilters}
-              options={COMPLAINT_CLASSIFICATIONS}
+              options={dictionaries.classification?.items || COMPLAINT_CLASSIFICATIONS}
               onChange={setClassificationFilters}
             />
             <MultiSelectFilter 
               label="Раздел"
               values={sectionFilters}
-              options={CLASSIFICATION_SECTIONS}
+              options={
+                dictionaries.sections?.groups?.reduce((acc: string[], g: any) => [...acc, ...g.items], []) 
+                || CLASSIFICATION_SECTIONS
+              }
               onChange={setSectionFilters}
             />
             <MultiSelectFilter 
               label="Статус мотивации"
               values={motivationFilters}
-              options={MOTIVATION_STATUSES}
+              options={
+                dictionaries.motivation_statuses?.groups?.reduce((acc: string[], g: any) => [...acc, ...g.items], [])
+                || MOTIVATION_STATUSES
+              }
               onChange={setMotivationFilters}
             />
 
             <div className="space-y-3">
-              <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Степень важности</label>
+              <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Значимость</label>
               <select 
                 value={importanceFilter}
                 onChange={(e) => setImportanceFilter(e.target.value)}
                 className="w-full bg-zinc-50 border-white rounded-2xl px-5 py-3.5 text-sm font-bold outline-none ring-2 ring-transparent focus:ring-primary/20 appearance-none shadow-sm transition-all text-[#1F2937]"
               >
                 <option>Все</option>
-                {COMPLAINT_STATUSES.map(s => <option key={s}>{s}</option>)}
+                <option>Критическая</option>
+                <option>Средняя</option>
+                <option>Низкая</option>
               </select>
             </div>
           </div>
@@ -831,115 +854,118 @@ export default function Analytics() {
       </div>
 
       {/* Kanban Board Visualization */}
-      <section className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
-          <div>
-            <h3 className="text-2xl font-black text-zinc-900 tracking-tight">Поток запросов</h3>
-            <p className="text-zinc-500 text-sm font-medium">Мониторинг жизненного цикла инцидентов</p>
+      {userRole !== 'manager' && (
+        <section className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+            <div>
+              <h3 className="text-2xl font-black text-zinc-900 tracking-tight">Поток запросов</h3>
+              <p className="text-zinc-500 text-sm font-medium">Мониторинг жизненного цикла инцидентов</p>
+            </div>
+            <div className="flex items-center gap-3 bg-zinc-100 p-1.5 rounded-2xl">
+               <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-600 shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" /> Активные
+               </div>
+               <div className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                  Всего: {filteredRequests.length}
+               </div>
+            </div>
           </div>
-          <div className="flex items-center gap-3 bg-zinc-100 p-1.5 rounded-2xl">
-             <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-600 shadow-sm">
-                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" /> Активные
-             </div>
-             <div className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                Всего: {filteredRequests.length}
-             </div>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {['in_progress', 'done'].map((status) => {
-            const statusRequests = filteredRequests.filter(r => r.status === status);
-            const getStatusConfig = (s: string) => {
-              switch(s) {
-                case 'Новый': return { color: 'bg-blue-500', light: 'bg-blue-50/50', border: 'border-blue-100', text: 'text-blue-600' };
-                case 'В работе': return { color: 'bg-amber-500', light: 'bg-amber-50/50', border: 'border-amber-100', text: 'text-amber-600' };
-                case 'Выполнен': return { color: 'bg-emerald-500', light: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600' };
-                default: return { color: 'bg-zinc-400', light: 'bg-zinc-50/50', border: 'border-zinc-200', text: 'text-zinc-400' };
-              }
-            };
-            const config = getStatusConfig(status);
-            
-            return (
-              <div key={status} className={cn("p-2 rounded-[2.5rem] flex flex-col border transition-all duration-500", config.light, config.border)}>
-                <div className="p-6 pb-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={cn("w-3 h-3 rounded-full", config.color, "shadow-lg shadow-current/20")} />
-                      <h4 className="font-black text-sm uppercase tracking-widest text-zinc-800">{status}</h4>
-                    </div>
-                    <span className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-zinc-500 shadow-sm border border-zinc-100">
-                      {statusRequests.length}
-                    </span>
-                  </div>
-                  <div className={cn("h-1 w-full rounded-full opacity-20", config.color)} />
-                </div>
-                
-                <div className="space-y-3 p-4 flex-1 overflow-y-auto max-h-[500px] custom-scrollbar scroll-smooth">
-                  <AnimatePresence mode="popLayout">
-                    {statusRequests.slice(0, 15).map((request, i) => (
-                      <motion.div 
-                        key={request.id}
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{ delay: i * 0.05 }}
-                        onClick={() => navigate(`/requests/${request.id}`)}
-                        className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-zinc-100 hover:shadow-xl hover:shadow-zinc-200/50 transition-all cursor-pointer group relative overflow-hidden active:scale-95"
-                      >
-                        <div className={cn("absolute top-0 left-0 w-1 h-full opacity-0 group-hover:opacity-100 transition-opacity", config.color)} />
-                        
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="px-2 py-0.5 bg-zinc-50 rounded text-[9px] font-black text-zinc-400 uppercase tracking-tighter">
-                            #{request.id?.slice(-6).toUpperCase()}
-                          </div>
-                        </div>
-
-                        <h5 className="text-xs font-black text-zinc-800 mb-2 line-clamp-1 group-hover:text-primary transition-colors">
-                          {request.clientName}
-                        </h5>
-                        <p className="text-[10px] text-zinc-400 font-medium line-clamp-2 leading-relaxed mb-4">
-                          {request.message}
-                        </p>
-
-                        <div className="flex items-center justify-between pt-3 border-t border-zinc-50">
-                          <div className="flex items-center gap-2">
-                             <div className="w-5 h-5 rounded-full bg-zinc-100 flex items-center justify-center">
-                               <Users size={10} className="text-zinc-400" />
-                             </div>
-                             <span className="text-[10px] font-bold text-zinc-500">{request.branchId}</span>
-                          </div>
-                          <span className="text-[9px] font-black text-zinc-300">
-                            {safeFormatDate(request.createdAt, "dd MMM")}
-                          </span>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-
-                  {statusRequests.length > 15 && (
-                    <button 
-                      onClick={() => navigate(`/analytics/status?value=${status}${getDateParams()}`)}
-                      className="w-full py-4 bg-white/50 border-2 border-dashed border-zinc-200 rounded-2xl text-[9px] font-black text-zinc-400 uppercase tracking-[0.2em] hover:bg-white hover:text-primary hover:border-primary/30 transition-all flex items-center justify-center gap-2 group"
-                    >
-                      Посмотреть еще {statusRequests.length - 15}
-                      <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  )}
-                  
-                  {statusRequests.length === 0 && (
-                    <div className="flex-1 flex flex-col items-center justify-center py-20">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-zinc-200 mb-3 shadow-inner">
-                        <MessageSquare size={20} />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {['in_progress', 'under_review', 'done'].map((status) => {
+              const statusRequests = filteredRequests.filter(r => r.status === status);
+              const getStatusConfig = (s: string) => {
+                switch(s) {
+                  case 'Новый': return { color: 'bg-zinc-400', light: 'bg-zinc-50/50', border: 'border-zinc-200', text: 'text-zinc-400' };
+                  case 'in_progress': return { color: 'bg-amber-500', light: 'bg-amber-50/50', border: 'border-amber-100', text: 'text-amber-600', label: 'В работе' };
+                  case 'under_review': return { color: 'bg-blue-500', light: 'bg-blue-50/50', border: 'border-blue-100', text: 'text-blue-600', label: 'На проверке' };
+                  case 'done': return { color: 'bg-emerald-500', light: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600', label: 'Выполнен' };
+                  default: return { color: 'bg-zinc-400', light: 'bg-zinc-50/50', border: 'border-zinc-200', text: 'text-zinc-400', label: s };
+                }
+              };
+              const config = getStatusConfig(status);
+              
+              return (
+                <div key={status} className={cn("p-2 rounded-[2.5rem] flex flex-col border transition-all duration-500", config.light, config.border)}>
+                  <div className="p-6 pb-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={cn("w-3 h-3 rounded-full", config.color, "shadow-lg shadow-current/20")} />
+                        <h4 className="font-black text-sm uppercase tracking-widest text-zinc-800">{config.label}</h4>
                       </div>
-                      <p className="text-[10px] font-black text-zinc-300 uppercase tracking-widest italic">Пусто</p>
+                      <span className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-zinc-500 shadow-sm border border-zinc-100">
+                        {statusRequests.length}
+                      </span>
                     </div>
-                  )}
+                    <div className={cn("h-1 w-full rounded-full opacity-20", config.color)} />
+                  </div>
+                  
+                  <div className="space-y-3 p-4 flex-1 overflow-y-auto max-h-[500px] custom-scrollbar scroll-smooth">
+                    <AnimatePresence mode="popLayout">
+                      {statusRequests.slice(0, 15).map((request, i) => (
+                        <motion.div 
+                          key={request.id}
+                          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ delay: i * 0.05 }}
+                          onClick={() => navigate(`/requests/${request.id}`)}
+                          className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-zinc-100 hover:shadow-xl hover:shadow-zinc-200/50 transition-all cursor-pointer group relative overflow-hidden active:scale-95"
+                        >
+                          <div className={cn("absolute top-0 left-0 w-1 h-full opacity-0 group-hover:opacity-100 transition-opacity", config.color)} />
+                          
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="px-2 py-0.5 bg-zinc-50 rounded text-[9px] font-black text-zinc-400 uppercase tracking-tighter">
+                              #{request.id?.slice(-6).toUpperCase()}
+                            </div>
+                          </div>
+  
+                          <h5 className="text-xs font-black text-zinc-800 mb-2 line-clamp-1 group-hover:text-primary transition-colors">
+                            {request.clientName}
+                          </h5>
+                          <p className="text-[10px] text-zinc-400 font-medium line-clamp-2 leading-relaxed mb-4">
+                            {request.message}
+                          </p>
+  
+                          <div className="flex items-center justify-between pt-3 border-t border-zinc-50">
+                            <div className="flex items-center gap-2">
+                               <div className="w-5 h-5 rounded-full bg-zinc-100 flex items-center justify-center">
+                                 <Users size={10} className="text-zinc-400" />
+                               </div>
+                               <span className="text-[10px] font-bold text-zinc-500">{request.branchId}</span>
+                            </div>
+                            <span className="text-[9px] font-black text-zinc-300">
+                              {safeFormatDate(request.createdAt, "dd MMM")}
+                            </span>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+  
+                    {statusRequests.length > 15 && (
+                      <button 
+                        onClick={() => navigate(`/analytics/status?value=${status}${getDateParams()}`)}
+                        className="w-full py-4 bg-white/50 border-2 border-dashed border-zinc-200 rounded-2xl text-[9px] font-black text-zinc-400 uppercase tracking-[0.2em] hover:bg-white hover:text-primary hover:border-primary/30 transition-all flex items-center justify-center gap-2 group"
+                      >
+                        Посмотреть еще {statusRequests.length - 15}
+                        <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                      </button>
+                    )}
+                    
+                    {statusRequests.length === 0 && (
+                      <div className="flex-1 flex flex-col items-center justify-center py-20">
+                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-zinc-200 mb-3 shadow-inner">
+                          <MessageSquare size={20} />
+                        </div>
+                        <p className="text-[10px] font-black text-zinc-300 uppercase tracking-widest italic">Пусто</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
         <div className="bg-white p-8 rounded-3xl border border-zinc-200 shadow-sm col-span-full">
           <ChartHeader title="Запросы по филиалам (Топ-10)" onExport={() => exportSectionToExcel(filteredRequests, "Запросы_по_филиалам")} />
@@ -1058,6 +1084,7 @@ export default function Analytics() {
                         fill={
                           entry.originalStatus === "done" ? "#10b981" : 
                           entry.originalStatus === "in_progress" ? "#f59e0b" : 
+                          entry.originalStatus === "under_review" ? "#3b82f6" :
                           entry.originalStatus === "new" ? "#3b82f6" :
                           "#94a3b8"
                         } 

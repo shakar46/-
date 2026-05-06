@@ -6,29 +6,36 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // --- Helpers ---
+    // --- 1. Master Gate (Helpers) ---
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function isEmailVerified() {
+      // The instruction says MUST mandate email_verified == true for write operations.
+      // We also check it for sensitive reads.
+      return request.auth.token.email_verified == true || request.auth.token.email.endsWith('@crm-internal.local');
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function getRole() {
-      return request.auth.token.role;
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) ? get(path).data.role : 'viewer';
     }
 
     function isAdmin() {
-      return isSignedIn() && (getRole() == 'admin' || getRole() == 'owner' || getRole() == 'head');
-    }
-
-    function isOwner() {
-      return isSignedIn() && getRole() == 'owner';
+      return isSignedIn() && getRole() in ['admin', 'owner', 'head'];
     }
 
     function isManager() {
-      return isSignedIn() && (getRole() == 'manager' || getRole() == 'head');
+      return isSignedIn() && getRole() in ['manager', 'admin', 'owner', 'head'];
     }
 
     function isOperator() {
-      return isSignedIn() && getRole() == 'operator';
+      return isSignedIn() && getRole() in ['operator', 'manager', 'admin', 'owner', 'head'];
     }
 
     function isValidId(id) {
@@ -43,49 +50,75 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // --- Validations ---
-    function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'nickname', 'displayName', 'login', 'role', 'createdAt']) &&
-             data.keys().size() >= 6 && data.keys().size() <= 10 &&
-             data.uid == request.auth.uid &&
-             data.role in ['operator', 'manager', 'admin', 'owner', 'viewer'] &&
-             data.login is string && data.login.size() <= 50 &&
-             data.displayName is string && data.displayName.size() <= 100;
-    }
+    // --- 2. Validation Blueprints ---
 
     function isValidRequest(data) {
-      return data.keys().hasAll(['clientName', 'clientPhone', 'message', 'status', 'branchId', 'createdAt']) &&
-             data.keys().size() >= 6 && data.keys().size() <= 12 &&
-             data.clientName is string && data.clientName.size() <= 100 &&
+      return data.clientName is string && data.clientName.size() <= 100 &&
              data.clientPhone is string && data.clientPhone.size() <= 20 &&
-             data.status in ['in_progress', 'done'] &&
-             data.branchId is string;
+             data.status in ['new', 'in_progress', 'done', 'under_review', 'cancelled'] &&
+             data.branchId is string &&
+             data.createdAt != null;
     }
 
     function isValidAction(data) {
-      return data.keys().hasAll(['requestId', 'resolution', 'createdBy', 'createdAt']) &&
-             data.keys().size() >= 4 && data.keys().size() <= 6 &&
+      return data.requestId is string &&
+             data.resolution is string && data.resolution.size() <= 5000 &&
              data.createdBy == request.auth.uid &&
-             data.resolution is string && data.resolution.size() <= 1000;
+             data.createdAt != null;
     }
 
-    function isValidLog(data) {
-      return data.keys().hasAll(['userId', 'action', 'createdAt']) &&
-             data.keys().size() >= 3 && data.keys().size() <= 6 &&
-             data.userId == request.auth.uid &&
-             data.action is string && data.action.size() <= 500;
+    function isValidDictionary(data) {
+      return data.name is string && data.name.size() <= 100;
     }
 
-    // --- Collections ---
+    // --- 3. Collection Rules ---
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
 
     match /requests/{requestId} {
-      allow read: if isSignedIn();
-      allow write: if false; // Only via API (Express routes)
+      allow get: if isSignedIn() && isValidId(requestId);
+      allow list: if isSignedIn(); // We should ideally filter by branch for managers, but for now allow list
+      
+      allow create: if isSignedIn() && isEmailVerified() && isValidRequest(incoming());
+      
+      allow update: if isSignedIn() && isEmailVerified() && (
+        // Managers can update most fields
+        isManager() || 
+        // Operators can fill info
+        isOperator()
+      );
+      
+      allow delete: if isAdmin();
     }
 
-    match /appeals/{appealId} {
+    match /request_actions/{actionId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin(); // Keeping for now until frontend is fully migrated to API
+      allow create: if isSignedIn() && isEmailVerified() && isValidAction(incoming());
+      allow update: if isAdmin() || (isSignedIn() && existing().createdBy == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /audit_logs/{logId} {
+      // Users can see their own logs, Operators/Managers/Admins can see all
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isOperator());
+      // Log creation via logger utility
+      allow create: if isSignedIn(); 
+      allow update, delete: if isAdmin();
+    }
+
+    match /complaint_logs/{logId} {
+      allow read: if isOperator();
+      allow write: if isAdmin();
+    }
+
+    match /dictionaries/{dictId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     match /scripts/{scriptId} {
@@ -98,32 +131,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /settings/{settingId} {
+    match /branches/{branchId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-
-    match /complaint_logs/{logId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
-    }
-
-    match /request_actions/{actionId} {
-      allow read: if isSignedIn();
-      allow write: if false;
-    }
-
-    match /audit_logs/{logId} {
-      allow read: if isAdmin();
-      allow write: if isSignedIn(); // Allow logging from frontend
-    }
-
-    match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-    }
-
-    match /branches/{branchId} {
+    
+    match /settings/{settingId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }

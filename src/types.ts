@@ -24,28 +24,70 @@ export interface Complaint {
   correctiveAction: string;
 }
 
+export interface RequestAction {
+  id: string;
+  requestId: string;
+  createdBy: string;
+  createdAt: any;
+  instantFix?: string;
+  resolution: string;
+}
+
 export interface CRMRequest {
   id: string;
   clientName: string;
   clientPhone: string;
   clientPhoto?: string;
+  clientPhotos?: string[];
   message: string;
   classification: string;
-  status: 'in_progress' | 'done';
+  classificationSection?: string;
+  status: 'new' | 'in_progress' | 'done' | 'under_review' | 'cancelled';
   managerId?: string;
   branchId: string;
+  branchName?: string;
   deadlineAt?: any;
   completedAt?: any;
   createdAt: any;
+  updatedAt?: any;
+
+  // New Fields from TZ
+  dateReceived?: string; // Дата поступления жалобы
+  orderDate?: string; // Дата заказа
+  additionalComment?: string; // Прилагательный комментарий (multi-select searchable)
+  productEmployee?: string[]; // Продукт / Сотрудник (multi-select searchable)
+  orderCheck?: string; // Чек заказа
+  briefDescription?: string; // Краткое описание
+  source?: string; // Источник
+  samplePhotoEvidence?: string[]; // Образец / Фото
+  extraPhoto?: string[]; // Дополнительная информация (фото)
+  complaintTaker?: string; // Кто принял жалобу (specialist)
+  sipAudio?: string; // SIP-аудиозапись
+  responsibleForCorrection?: string; // Ответственный за коррекцию (manager)
+  deadlineStatus?: string; // Срок устранения (Выполнен в срок / Просрочено / и т.д.)
+  instantCorrection?: string; // Моментальная коррекция
+  finalResolution?: string; // Решение
+  rootCauseAnalysis?: string; // Анализ корневых причин ("Почему")
+  fiveWhys?: string[]; // Structured 5 whys analysis
+  motivationStatus?: string[]; // Статус для отдела мотивации и аналитики
+  correctiveActions?: string; // Корректирующие действия
+  significance?: 'Низкая' | 'Средняя' | 'Критическая'; // Значимость обращения
+  classificationConfirmed?: string; // Подтверждённая классификация (full path)
+  analyticsPhotos?: string[]; // Фото подтверждающей информации в аналитике
+  confirmedClassification?: string; // (deprecated)
+  confirmedSection?: string; // Подтверждённый раздел
+  confirmedMotivationDept?: string; // Подтверждённый отдел мотивации
+  validityStatus?: 'обоснованный' | 'не обоснованный' | 'выявляется'; // Статус обоснованности
 }
 
-export interface RequestAction {
-  id: string;
-  requestId: string;
-  instantFix?: string;
-  resolution: string;
-  createdBy: string;
-  createdAt: any;
+export interface Dictionary {
+  id: string; // classification, section, comment, product, source, etc.
+  name: string;
+  groups?: {
+    name: string;
+    items: string[];
+  }[];
+  items?: string[];
 }
 
 export interface User {
@@ -53,7 +95,7 @@ export interface User {
   nickname: string;
   displayName: string;
   login: string;
-  role: 'operator' | 'manager' | 'admin' | 'owner' | 'viewer';
+  role: 'operator' | 'manager' | 'admin' | 'owner' | 'head' | 'viewer';
   branchId?: string;
   phone?: string;
   photoUrl?: string;

@@ -87,7 +87,7 @@ export default function PublicForm() {
 
       setSubmitted(true);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, "appeals");
+      handleFirestoreError(error, OperationType.CREATE, "requests");
     }
     setLoading(false);
   };

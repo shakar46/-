@@ -200,38 +200,40 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="space-y-8">
-          <h3 className="text-3xl font-black tracking-tight text-[#1F2937] px-2">Активность</h3>
-          
-          <div className="bg-[#1F2937] p-10 rounded-[3.5rem] shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
-            <h4 className="text-white font-black text-xl mb-10 tracking-tight">Топ филиалов</h4>
-            <div className="space-y-8">
-              {stats.topBranches.length > 0 ? stats.topBranches.map((item, i) => (
-                <div key={i} className="space-y-3">
-                  <div className="flex justify-between items-end">
-                    <span className="text-zinc-400 text-[10px] font-black uppercase tracking-[0.2em]">{item.name}</span>
-                    <span className="text-white font-black text-lg">{item.count}</span>
-                  </div>
-                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(item.count / stats.topBranches[0].count) * 100}%` }}
-                      transition={{ duration: 1, ease: "easeOut", delay: i * 0.1 }}
-                      className="h-full bg-primary shadow-[0_0_15px_rgba(47,128,237,0.5)]" 
-                    />
-                  </div>
-                </div>
-              )) : (
-                <p className="text-xs text-zinc-500 text-center py-10 italic">Данные отсутствуют</p>
-              )}
-            </div>
+        {userRole !== 'manager' && (
+          <div className="space-y-8">
+            <h3 className="text-3xl font-black tracking-tight text-[#1F2937] px-2">Активность</h3>
             
-            <Link to="/analytics" className="mt-12 w-full flex items-center justify-center gap-3 bg-white/10 hover:bg-white/20 text-white py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] transition-all">
-              Подробная аналитика <TrendingUp size={16} />
-            </Link>
+            <div className="bg-[#1F2937] p-10 rounded-[3.5rem] shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
+              <h4 className="text-white font-black text-xl mb-10 tracking-tight">Топ филиалов</h4>
+              <div className="space-y-8">
+                {stats.topBranches.length > 0 ? stats.topBranches.map((item, i) => (
+                  <div key={i} className="space-y-3">
+                    <div className="flex justify-between items-end">
+                      <span className="text-zinc-400 text-[10px] font-black uppercase tracking-[0.2em]">{item.name}</span>
+                      <span className="text-white font-black text-lg">{item.count}</span>
+                    </div>
+                    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(item.count / stats.topBranches[0].count) * 100}%` }}
+                        transition={{ duration: 1, ease: "easeOut", delay: i * 0.1 }}
+                        className="h-full bg-primary shadow-[0_0_15px_rgba(47,128,237,0.5)]" 
+                      />
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-xs text-zinc-500 text-center py-10 italic">Данные отсутствуют</p>
+                )}
+              </div>
+              
+              <Link to="/analytics" className="mt-12 w-full flex items-center justify-center gap-3 bg-white/10 hover:bg-white/20 text-white py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] transition-all">
+                Подробная аналитика <TrendingUp size={16} />
+              </Link>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

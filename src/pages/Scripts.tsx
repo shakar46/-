@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { collection, query, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { useFirebase } from "../components/FirebaseProvider";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
-import { Search, Plus, FileText, Trash2, Edit, Save, X, ChevronRight, Repeat, Check, AlertCircle } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Search, Plus, FileText, Trash2, Edit, Save, X, ChevronRight, Check, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function Scripts() {
+  const { userRole } = useFirebase();
   const [scripts, setScripts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const isOperator = userRole === 'operator';
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [editingScript, setEditingScript] = useState<any>(null);
@@ -101,17 +103,19 @@ export default function Scripts() {
           <h1 className="text-4xl font-bold tracking-tight mb-2">Скрипты</h1>
           <p className="text-zinc-500">База знаний и готовые сценарии ответов для операторов.</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingScript(null);
-            setFormData({ title: "", content: "", category: "Скрипты гостей", author: "" });
-            setIsModalOpen(true);
-          }}
-          className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10"
-        >
-          <Plus size={20} />
-          Добавить скрипт
-        </button>
+        {!isOperator && (
+          <button
+            onClick={() => {
+              setEditingScript(null);
+              setFormData({ title: "", content: "", category: "Скрипты гостей", author: "" });
+              setIsModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-bold hover:scale-[1.02] transition-all shadow-lg shadow-black/10"
+          >
+            <Plus size={20} />
+            Добавить скрипт
+          </button>
+        )}
       </header>
 
       <div className="relative">
@@ -156,27 +160,29 @@ export default function Scripts() {
                         <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400 group-hover:text-black transition-colors">
                           <FileText size={20} />
                         </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => {
-                              setEditingScript(script);
-                              setFormData({ title: script.title, content: script.content, category: script.category, author: script.author || "" });
-                              setIsModalOpen(true);
-                            }}
-                            className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-50 rounded-lg transition-all"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button 
-                            onClick={() => {
-                              setScriptToDelete(script.id);
-                              setIsDeleteModalOpen(true);
-                            }}
-                            className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                        {!isOperator && (
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={() => {
+                                setEditingScript(script);
+                                setFormData({ title: script.title, content: script.content, category: script.category, author: script.author || "" });
+                                setIsModalOpen(true);
+                              }}
+                              className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-50 rounded-lg transition-all"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setScriptToDelete(script.id);
+                                setIsDeleteModalOpen(true);
+                              }}
+                              className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <h3 className="text-lg font-bold mb-2 line-clamp-1">{script.title}</h3>
                       <div className="flex items-center gap-2 mb-4">

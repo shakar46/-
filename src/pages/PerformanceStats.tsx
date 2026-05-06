@@ -34,7 +34,7 @@ const PerformanceStats = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const appealsQ = query(collection(db, "appeals"));
+        const appealsQ = query(collection(db, "requests"));
         const logsQ = query(collection(db, "complaint_logs"), orderBy("timestamp", "desc"));
         const usersQ = query(collection(db, "users"));
 
@@ -73,7 +73,7 @@ const PerformanceStats = () => {
     }
 
     return filtered.filter(a => {
-      const date = convertToDate(a.created_at);
+      const date = convertToDate(a.createdAt || a.created_at);
       if (!date) return false;
       return isWithinInterval(date, { start, end });
     });
@@ -373,7 +373,7 @@ const PerformanceStats = () => {
               <p className="text-sm font-bold mb-1">{l.manager_name}</p>
               <div className="flex items-center gap-2 text-xs text-zinc-500">
                 <ArrowRight size={12} className="text-zinc-300" />
-                <span>Обращение #{l.appeal_id?.slice(-6) || "..."}</span>
+                <span>Обращение #{l.request_id?.slice(-6) || l.appeal_id?.slice(-6) || "..."}</span>
               </div>
             </div>
           ))}

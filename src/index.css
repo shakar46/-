@@ -25,7 +25,12 @@
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
 }
-
+*{
+    text-decoration: none;
+    outline: none;
+    box-sizing: border-box;
+    list-style: none;
+}
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
