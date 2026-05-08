@@ -99,7 +99,8 @@ export default function PoisoningAppeal() {
       
       const appealId = result.id;
       
-      // Send Telegram notification
+      // Send Telegram notification - REMOVED, handled by server
+      /*
       const messageText = `🚨 <b>ОБРАЩЕНИЕ ПО ОТРАВЛЕНИЮ</b> 🚨\n\n` +
         `🆔 Номер: ${result.guestNumber}\n` +
         `👤 Клиент: ${formData.client_name}\n` +
@@ -117,6 +118,7 @@ export default function PoisoningAppeal() {
         `🔗 <a href="${window.location.origin}/#/requests/${appealId}">Открыть в CRM</a>`;
 
       await sendTelegramMessage(messageText, 'main');
+      */
 
       // Send Audit notification
       await sendTelegramMessage(

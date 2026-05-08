@@ -74,7 +74,7 @@ async function startServer() {
   const logAction = async (userId: string, action: string, entityType: string, entityId?: string, changes?: any) => {
     if (!db) return;
     try {
-      await db.collection("audit_logs").add({
+      const docRef = await db.collection("audit_logs").add({
         userId,
         action,
         entityType,
@@ -82,10 +82,43 @@ async function startServer() {
         changes: changes || null,
         createdAt: FieldValue.serverTimestamp(),
       });
+      // console.log(`Audit log created: ${docRef.id}`);
     } catch (e) {
       console.error("Failed to log action:", e);
     }
   };
+
+  const sendTelegramMessage = async (token: string, chatId: string, text: string) => {
+    if (!token || !chatId) return;
+    try {
+      const url = `https://api.telegram.org/bot${token}/sendMessage`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+      });
+      if (!response.ok) {
+        console.error("Telegram API error:", await response.text());
+      }
+    } catch (err) {
+      console.error("Telegram notification failed:", err);
+    }
+  };
+
+  // Audit Logging Route
+  app.post("/api/audit/log", async (req, res) => {
+    if (!auth || !db) return res.status(500).json({ success: false, error: "Firebase missing" });
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, error: "Unauthorized" });
+    try {
+      const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
+      const { action, entityType, entityId, metadata } = req.body;
+      await logAction(decodedToken.uid, action, entityType, entityId, metadata);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
 
   // AI analysis route
   app.post("/api/ai/analyze-root-cause", async (req, res) => {
@@ -232,6 +265,39 @@ async function startServer() {
       };
 
       const docRef = await db.collection("requests").add(requestData);
+      
+      // Send Telegram Notification
+      try {
+        const tgSettingsDoc = await db.collection("settings").doc("telegram").get();
+        if (tgSettingsDoc.exists) {
+          const s = tgSettingsDoc.data();
+          if (s?.notifications_enabled && s?.telegram_token && s?.telegram_chat_id) {
+            const branchDoc = requestData.branchId ? await db.collection("dictionaries").doc("branch_names").get() : null;
+            const branchName = branchDoc?.exists ? (branchDoc.data()?.items || []).find((b: string) => b.includes(requestData.branchId || "")) || requestData.branchId : requestData.branchId;
+            
+            const messageText = `
+<b>🆕 Новое обращение: ${guestNumber}</b>
+<b>👤 Клиент:</b> ${clientName || "Не указан"}
+<b>📞 Телефон:</b> ${clientPhone || "Не указан"}
+<b>📍 Филиал:</b> ${branchName || "Не указан"}
+<b>📋 Категория:</b> ${classification || "Не указана"}
+${req.body.classificationSection ? `<b>🖇 Секция:</b> ${req.body.classificationSection}\n` : ""}
+<b>📝 Сообщение:</b> ${message || "Без описания"}
+${poisoningDetails ? `
+<b>🚨 ДЕТАЛИ ОТРАВЛЕНИЯ:</b>
+- Симптомы: ${poisoningDetails.symptoms}
+- Ели/Заболели: ${poisoningDetails.peopleConsumed}/${poisoningDetails.peopleSymptoms}
+- Подозрение на: ${poisoningDetails.suspectedIngredients}
+` : ""}
+<b>🔗 Ссылка:</b> <a href="https://${req.get('host')}/requests/${docRef.id}">Открыть в CRM</a>
+            `;
+            await sendTelegramMessage(s.telegram_token, s.telegram_chat_id, messageText);
+          }
+        }
+      } catch (tgErr) {
+        console.error("Error sending TG notification:", tgErr);
+      }
+
       await logAction(decodedToken.uid, `Создано обращение ${guestNumber}: ${docRef.id}`, "Request", docRef.id);
       res.json({ success: true, id: docRef.id, guestNumber });
     } catch (error: any) {

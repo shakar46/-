@@ -108,7 +108,7 @@ export default function TelegramSettings() {
                 </div>
                 <div>
                   <h3 className="font-bold">Статус уведомлений</h3>
-                  <p className="text-xs text-zinc-400">Включить или отключить отправку сообщений ботом</p>
+                  <p className="text-xs text-zinc-400">Уведомления о новых обращениях в основной чат</p>
                 </div>
               </div>
               <button

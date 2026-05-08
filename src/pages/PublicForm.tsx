@@ -40,42 +40,28 @@ export default function PublicForm() {
     e.preventDefault();
     setLoading(true);
     try {
-      // Use requests collection for consistency with the rest of the app
-      const docRef = await addDoc(collection(db, "requests"), {
-        clientName: formData.client_name,
-        clientPhone: formData.client_phone,
-        branchId: formData.branch_name,
-        message: formData.complaint_text,
-        status: "in_progress",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        source: "website"
+      // Use API for consistency and automatic notifications
+      const response = await fetch("/api/requests/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${await auth.currentUser?.getIdToken()}`
+        },
+        body: JSON.stringify({
+          clientName: formData.client_name,
+          clientPhone: formData.client_phone,
+          branchId: formData.branch_name,
+          message: formData.complaint_text,
+          source: "website"
+        })
       });
 
-      const appealId = docRef.id;
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
 
-      // Send Main notification
-      await sendTelegramMessage(
-        `🌐 <b>Новое обращение с сайта</b>\n\n` +
-        `🆔 ID: #${appealId.slice(0, 8)}\n` +
-        `👤 Клиент: ${formData.client_name}\n` +
-        `📞 Телефон: ${formData.client_phone}\n` +
-        `📍 Филиал: ${formData.branch_name}\n` +
-        `📝 Текст: ${formData.complaint_text}\n\n` +
-        `🔗 <a href="${window.location.origin}/#/requests/${appealId}">Открыть в CRM</a>`
-      );
+      const appealId = result.id;
 
-      // Send Audit notification
-      await sendTelegramMessage(
-        `🛡 <b>АУДИТ: Новое обращение с сайта</b>\n\n` +
-        `👤 Кто: Публичная форма (Сайт)\n` +
-        `📝 Действие: Создано обращение через сайт\n` +
-        `🆔 ID: #${appealId.slice(0, 8)}\n` +
-        `👤 Клиент: ${formData.client_name}`,
-        'audit'
-      );
-
-      // Log action
+      // Log action (client-side backup, audit handled by server too usually)
       await logEvent({
         userId: "public",
         userEmail: "public@site.com",

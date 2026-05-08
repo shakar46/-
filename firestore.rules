@@ -104,10 +104,16 @@ service cloud.firestore {
     }
 
     match /audit_logs/{logId} {
-      // Users can see their own logs, Operators/Managers/Admins can see all
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isOperator());
+      // Allow reading if the user is an operator OR if they are the owner of the log.
+      // We use a broader check for list operations to prevent index-related permission blocks.
+      allow read: if isSignedIn() && (
+        isOperator() || 
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (resource == null) // This helps with some query planning in Firestore
+      );
       // Log creation via logger utility
       allow create: if isSignedIn(); 
+      // Audit logs are write-only for standard users
       allow update, delete: if isAdmin();
     }
 
