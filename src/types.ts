@@ -41,7 +41,7 @@ export interface CRMRequest {
   clientPhotos?: string[];
   message: string;
   classification: string;
-  classificationSection?: string;
+  classificationSection?: string | string[];
   status: 'new' | 'in_progress' | 'done' | 'under_review' | 'cancelled';
   managerId?: string;
   branchId: string;

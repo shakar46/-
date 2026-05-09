@@ -57,7 +57,7 @@ export default function RequestDetail() {
   const [processing, setProcessing] = useState(false);
   const [resolution, setResolution] = useState("");
   const [instantFix, setInstantFix] = useState("");
-  const [classificationConfirmed, setClassificationConfirmed] = useState("");
+  const [classificationConfirmed, setClassificationConfirmed] = useState<string[]>([]);
 
   // Local state for all fields (to allow editing)
   const [formData, setFormData] = useState<Partial<CRMRequest>>({});
@@ -121,14 +121,16 @@ export default function RequestDetail() {
           requestId: id,
           instantFix,
           resolution,
-          classificationConfirmed: classificationConfirmed || `${formData.classification} / ${formData.classificationSection}`
+          classificationConfirmed: classificationConfirmed.length > 0 
+            ? `${formData.classification} / ${classificationConfirmed.join(', ')}`
+            : `${formData.classification} / ${Array.isArray(formData.classificationSection) ? formData.classificationSection.join(', ') : formData.classificationSection}`
         })
       });
       const result = await response.json();
       if (result.success) {
         setResolution("");
         setInstantFix("");
-        setClassificationConfirmed("");
+        setClassificationConfirmed([]);
         fetchActions();
         // Update local request data if status changed
         const docSnap = await getDoc(doc(db, "requests", id!));
@@ -442,13 +444,16 @@ export default function RequestDetail() {
                       value={formData.classification || ""}
                       onChange={(val) => setFormData({ ...formData, classification: val, classificationSection: "" })}
                     />
-                    <SearchableSelect 
+                    <SearchableMultiSelect 
                       label="Раздел классификации *"
                       disabled={!canEditMainInfo}
-                      options={dictionaries.sections?.groups?.find(g => g.name === formData.classification)?.items || []}
-                      value={formData.classificationSection || ""}
+                      options={[{ 
+                        name: formData.classification || "Разделы", 
+                        items: dictionaries.sections?.groups?.find(g => g.name === formData.classification)?.items || [] 
+                      }]}
+                      value={Array.isArray(formData.classificationSection) ? formData.classificationSection : (formData.classificationSection ? [formData.classificationSection] : [])}
                       onChange={(val) => setFormData({ ...formData, classificationSection: val })}
-                      placeholder="Выберите раздел..."
+                      placeholder="Выберите разделы..."
                     />
                   </div>
 
@@ -773,11 +778,16 @@ export default function RequestDetail() {
                       onChange={(val) => setFormData({ ...formData, classification: val })}
                       placeholder="Классификация..."
                     />
-                    <SearchableSelect 
-                      options={dictionaries.sections?.groups?.find(g => g.name === formData.classification)?.items || []}
-                      value={classificationConfirmed || formData.classificationSection || ""}
+                    <SearchableMultiSelect 
+                      options={[{ 
+                        name: formData.classification || "Разделы", 
+                        items: dictionaries.sections?.groups?.find(g => g.name === formData.classification)?.items || [] 
+                      }]}
+                      value={classificationConfirmed.length > 0 
+                        ? classificationConfirmed 
+                        : (Array.isArray(formData.classificationSection) ? formData.classificationSection : (formData.classificationSection ? [formData.classificationSection] : []))}
                       onChange={setClassificationConfirmed}
-                      placeholder="Уточните раздел..."
+                      placeholder="Уточните разделы..."
                     />
                   </div>
                 </div>

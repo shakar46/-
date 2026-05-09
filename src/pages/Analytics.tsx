@@ -297,9 +297,9 @@ export default function Analytics() {
     "Пищевая безопасность", "Доставка", "Упаковка", "Пресный вкус", "Слабый вкус", "Яркий вкус"
   ];
 
-  const getMotivationDepartment = (classification: string, section: string, source: string) => {
-    const cls = (classification || "").trim();
-    const sec = (section || "").trim();
+  const getMotivationDepartment = (classification: string, section: string | string[], source: string) => {
+    const cls = (classification || "").toLowerCase();
+    const sec = Array.isArray(section) ? section.join(', ').toLowerCase() : (section || "").toLowerCase();
     const src = (source || "").toLowerCase();
 
     // Priority 1: Partner Source (if not matched by classification specifically as a complaint about them)

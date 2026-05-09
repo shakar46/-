@@ -13,9 +13,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { convertToDate, safeFormat } from "../utils/dateUtils";
 
 // Helper to determine motivation department (duplicated from Analytics.tsx for consistency)
-const getMotivationDepartment = (classification: string, section: string, source: string) => {
+const getMotivationDepartment = (classification: string, section: string | string[], source: string) => {
   const cls = classification?.toLowerCase() || "";
-  const sec = section?.toLowerCase() || "";
+  const sec = Array.isArray(section) ? section.join(', ').toLowerCase() : (section?.toLowerCase() || "");
   const src = source?.toLowerCase() || "";
 
   // Partners (highest priority)
