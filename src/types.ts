@@ -70,6 +70,7 @@ export interface CRMRequest {
   rootCauseAnalysis?: string; // Анализ корневых причин ("Почему")
   fiveWhys?: string[]; // Structured 5 whys analysis
   motivationStatus?: string[]; // Статус для отдела мотивации и аналитики
+  motivationDept?: string; // Отдел мотивации
   correctiveActions?: string; // Корректирующие действия
   significance?: 'Низкая' | 'Средняя' | 'Критическая'; // Значимость обращения
   classificationConfirmed?: string; // Подтверждённая классификация (full path)

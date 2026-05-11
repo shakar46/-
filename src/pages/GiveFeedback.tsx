@@ -69,7 +69,7 @@ export default function GiveFeedback() {
     r.message?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (userRole !== 'manager' && userRole !== 'admin' && userRole !== 'owner') {
+  if (userRole !== 'manager' && userRole !== 'admin' && userRole !== 'owner' && userRole !== 'head') {
     return <div className="p-20 text-center font-bold text-zinc-400">У вас нет доступа к этой странице</div>;
   }
 

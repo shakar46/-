@@ -30,6 +30,7 @@ import { useFirebase } from "../components/FirebaseProvider";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import imageCompression from "browser-image-compression";
 import { cn } from "../lib/utils";
 import { CRMRequest, Dictionary } from "../types";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
@@ -246,7 +247,7 @@ export default function RequestDetail() {
   if (!request) return <div className="p-20 text-center font-bold text-zinc-400">Обращение не найдено</div>;
 
   const TABS = [
-    { id: "general", label: "Основная", icon: Info },
+    { id: "general", label: "Инфо", icon: Info },
     { id: "evidence", label: "Подтверждение", icon: ImageIcon },
     { id: "processing", label: "Обработка", icon: Zap },
     { id: "analytics", label: "Аналитика", icon: FileText }
@@ -336,18 +337,18 @@ export default function RequestDetail() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-10"
               >
-                {/* Basic Info Group */}
+                {/* Block 1: Основная информация */}
                 <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
                   <div className="flex items-center gap-4 mb-2">
                     <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
                       <User size={20} />
                     </div>
-                    <h2 className="text-xl font-black text-zinc-900">Основная информация</h2>
+                    <h2 className="text-xl font-bold text-zinc-900 tracking-tight">1. Основная информация</h2>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Дата создание</label>
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Дата создания</label>
                       <div className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold text-zinc-500">
                         {safeFormat(request?.createdAt, "dd.MM.yyyy HH:mm:ss")}
                       </div>
@@ -359,7 +360,7 @@ export default function RequestDetail() {
                         className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all disabled:opacity-50"
                         value={formData.clientName || ""}
                         onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
-                        placeholder="Введите имя..."
+                        placeholder="Автоматически..."
                       />
                     </div>
                   </div>
@@ -372,11 +373,11 @@ export default function RequestDetail() {
                         className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all disabled:opacity-50"
                         value={formData.clientPhone || ""}
                         onChange={(e) => setFormData({ ...formData, clientPhone: e.target.value })}
-                        placeholder="+998..."
+                        placeholder="Автоматически..."
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Дата поступления</label>
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Дата поступления (Дата и время)</label>
                       <input 
                         type="datetime-local"
                         disabled={!canEditMainInfo}
@@ -386,11 +387,12 @@ export default function RequestDetail() {
                       />
                     </div>
                   </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Дата заказа</label>
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Дата заказа (Дата и время)</label>
                       <input 
-                        type="date"
+                        type="datetime-local"
                         disabled={!canEditMainInfo}
                         className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all disabled:opacity-50"
                         value={formData.orderDate || ""}
@@ -403,6 +405,7 @@ export default function RequestDetail() {
                       options={dictionaries.sources?.items || []}
                       value={formData.source || ""}
                       onChange={(val) => setFormData({ ...formData, source: val })}
+                      placeholder="Выберите источник..."
                     />
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Чек заказа</label>
@@ -411,7 +414,7 @@ export default function RequestDetail() {
                         className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all disabled:opacity-50"
                         value={formData.orderCheck || ""}
                         onChange={(e) => setFormData({ ...formData, orderCheck: e.target.value })}
-                        placeholder="Номер чека..."
+                        placeholder="Автоматически..."
                       />
                     </div>
                   </div>
@@ -423,29 +426,41 @@ export default function RequestDetail() {
                       options={dictionaries.branch_names?.items || []}
                       value={formData.branchName || ""}
                       onChange={(val) => setFormData({ ...formData, branchName: val })}
+                      placeholder="Автоматически..."
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Краткое описание обращения</label>
+                    <textarea 
+                      disabled={!canEditMainInfo}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all min-h-[100px] resize-none disabled:opacity-50"
+                      value={formData.message || ""}
+                      onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                      placeholder="Автоматически..."
                     />
                   </div>
                 </section>
 
-                {/* Classification Section */}
+                {/* Block 2: Классификация обращения */}
                 <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
                   <div className="flex items-center gap-4 mb-2">
                     <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
                       <Layers size={20} />
                     </div>
-                    <h2 className="text-xl font-black text-zinc-900">Классификация</h2>
+                    <h2 className="text-xl font-bold text-zinc-900 tracking-tight">2. Классификация обращения</h2>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <SearchableSelect 
-                      label="Классификация жалобы *"
+                      label="Классификация жалобы"
                       disabled={!canEditMainInfo}
                       options={dictionaries.classification?.items || []}
                       value={formData.classification || ""}
                       onChange={(val) => setFormData({ ...formData, classification: val, classificationSection: "" })}
                     />
                     <SearchableMultiSelect 
-                      label="Раздел классификации *"
+                      label="Раздел классификации"
                       disabled={!canEditMainInfo}
                       options={[{ 
                         name: formData.classification || "Разделы", 
@@ -457,38 +472,22 @@ export default function RequestDetail() {
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Краткое описание обращения *</label>
-                    <textarea 
-                      disabled={!canEditMainInfo}
-                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 transition-all min-h-[160px] resize-none disabled:opacity-50"
-                      value={formData.message || ""}
-                      onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                      placeholder="Опишите суть проблемы..."
-                    />
-                  </div>
-
                   <SearchableMultiSelect 
-                    label="Прилагательный комментарий (Справочник)"
+                    label="Прилагательный комментарий"
                     disabled={!canEditMainInfo}
                     options={dictionaries.adjective_comments?.groups || []}
                     value={formData.additionalComment ? formData.additionalComment.split(',').filter(Boolean) : []}
                     onChange={(val) => setFormData({ ...formData, additionalComment: val.join(',') })}
                   />
-                </section>
 
-                {/* Product Section */}
-                {!isOperatorOnly && (
-                  <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
-                    <SearchableMultiSelect 
-                      label="Продукт / Сотрудник (Справочник)"
-                      disabled={!canEditProcessing}
-                      options={dictionaries.products_employees?.groups || []}
-                      value={formData.productEmployee || []}
-                      onChange={(val) => setFormData({ ...formData, productEmployee: val })}
-                    />
-                  </section>
-                )}
+                  <SearchableMultiSelect 
+                    label="Продукт / Сотрудник"
+                    disabled={!canEditProcessing}
+                    options={dictionaries.products_employees?.groups || []}
+                    value={formData.productEmployee || []}
+                    onChange={(val) => setFormData({ ...formData, productEmployee: val })}
+                  />
+                </section>
               </motion.div>
             )}
 
@@ -500,40 +499,30 @@ export default function RequestDetail() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-10"
               >
+                {/* Block 3: Подтверждение */}
                 <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
                   <div className="flex items-center gap-4 mb-2">
                     <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
                       <ImageIcon size={20} />
                     </div>
-                    <h2 className="text-xl font-black text-zinc-900">Подтверждающая информация</h2>
+                    <h2 className="text-xl font-bold text-zinc-900 tracking-tight">3. Подтверждение</h2>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                     <div className="space-y-6">
                       <div className="space-y-4">
-                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Потребительские фото (от клиента)</label>
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Фото от потребителя</label>
                         <div className="grid grid-cols-2 gap-4">
                           {formData.clientPhotos?.map((url, idx) => (
-                            <div key={idx} className="relative group cursor-pointer" onClick={() => setSelectedImage(url)}>
-                              <img src={url} className="w-full h-32 object-cover rounded-2xl border border-zinc-100 shadow-sm" referrerPolicy="no-referrer" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Образец / Фото перепроверки</label>
-                        <div className="grid grid-cols-2 gap-4">
-                          {formData.samplePhotoEvidence?.map((url, idx) => (
                             <div key={idx} className="relative group cursor-pointer" onClick={() => setSelectedImage(url)}>
                               <img src={url} className="w-full h-32 object-cover rounded-2xl border border-zinc-100 shadow-sm" referrerPolicy="no-referrer" />
                               {canEditMainInfo && (
                                 <button 
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const newUrls = [...(formData.samplePhotoEvidence || [])];
+                                    const newUrls = [...(formData.clientPhotos || [])];
                                     newUrls.splice(idx, 1);
-                                    setFormData({ ...formData, samplePhotoEvidence: newUrls });
+                                    setFormData({ ...formData, clientPhotos: newUrls });
                                   }}
                                   className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
@@ -542,29 +531,42 @@ export default function RequestDetail() {
                               )}
                             </div>
                           ))}
-                          {canEditMainInfo && (
-                            <label className="h-32 border-2 border-dashed border-zinc-200 rounded-3xl flex flex-col items-center justify-center gap-2 text-zinc-400 hover:text-primary hover:border-primary transition-all cursor-pointer">
-                              <Plus size={24} />
-                              <span className="text-[8px] font-black uppercase tracking-widest text-center px-2">Загрузить</span>
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                className="hidden" 
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    // Normally we would upload to Firebase Storage, for now using base64 for demo/simplicity
+                          <label className="h-32 border-2 border-dashed border-zinc-200 rounded-3xl flex flex-col items-center justify-center gap-2 text-zinc-400 hover:text-primary hover:border-primary transition-all cursor-pointer">
+                            <Plus size={24} />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-center px-2">Добавить фото</span>
+                            <input 
+                              type="file" 
+                              multiple
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={async (e) => {
+                                const files = Array.from(e.target.files || []);
+                                if (files.length === 0) return;
+                                
+                                const options = {
+                                  maxSizeMB: 0.5,
+                                  maxWidthOrHeight: 1280,
+                                  useWebWorker: true
+                                };
+                                
+                                const newPhotos = [...(formData.clientPhotos || [])];
+                                for (const file of files) {
+                                  try {
+                                    const compressedFile = await imageCompression(file, options);
                                     const reader = new FileReader();
-                                    reader.onloadend = () => {
-                                      const newUrls = [...(formData.samplePhotoEvidence || []), reader.result as string];
-                                      setFormData({ ...formData, samplePhotoEvidence: newUrls });
-                                    };
-                                    reader.readAsDataURL(file);
+                                    const photoData = await new Promise<string>((resolve) => {
+                                      reader.onloadend = () => resolve(reader.result as string);
+                                      reader.readAsDataURL(compressedFile);
+                                    });
+                                    newPhotos.push(photoData);
+                                  } catch (error) {
+                                    console.error("Compression error:", error);
                                   }
-                                }}
-                              />
-                            </label>
-                          )}
+                                }
+                                setFormData({ ...formData, clientPhotos: newPhotos });
+                              }}
+                            />
+                          </label>
                         </div>
                       </div>
                     </div>
@@ -578,7 +580,7 @@ export default function RequestDetail() {
                           className="bg-transparent flex-1 outline-none text-sm font-bold disabled:opacity-50"
                           value={formData.sipAudio || ""}
                           onChange={(e) => setFormData({ ...formData, sipAudio: e.target.value })}
-                          placeholder="https://sip.vpbx.uz/..."
+                          placeholder="Вставьте ссылку на запись..."
                         />
                       </div>
                     </div>
@@ -595,31 +597,30 @@ export default function RequestDetail() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-10"
               >
+                {/* Block 4: Обработка */}
                 <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
                   <div className="flex items-center gap-4 mb-2">
                     <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
                       <Zap size={20} />
                     </div>
-                    <h2 className="text-xl font-black text-zinc-900">Распределение и обработка</h2>
+                    <h2 className="text-xl font-bold text-zinc-900 tracking-tight">4. Обработка</h2>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Кто принял жалобу</label>
                       <input 
-                        disabled={!canEditMainInfo}
-                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none disabled:opacity-50"
-                        value={formData.complaintTaker || ""}
-                        onChange={(e) => setFormData({ ...formData, complaintTaker: e.target.value })}
+                        disabled
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none text-zinc-400"
+                        value={formData.complaintTaker || "Автоматически..."}
                       />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Ответственный за коррекцию</label>
                       <input 
-                        disabled={!canEditProcessing}
-                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none disabled:opacity-50"
-                        value={formData.responsibleForCorrection || ""}
-                        onChange={(e) => setFormData({ ...formData, responsibleForCorrection: e.target.value })}
+                        disabled
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none text-zinc-400"
+                        value={formData.responsibleForCorrection || "Автоматически..."}
                       />
                     </div>
                     <SearchableSelect 
@@ -628,26 +629,25 @@ export default function RequestDetail() {
                       options={dictionaries.deadline_statuses?.items || []}
                       value={formData.deadlineStatus || ""}
                       onChange={(val) => setFormData({ ...formData, deadlineStatus: val })}
+                      placeholder="Автоматически..."
                     />
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Моментальная коррекция</label>
                     <textarea 
-                      disabled={!canEditProcessing}
-                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[120px] disabled:opacity-50"
-                      value={formData.instantCorrection || ""}
-                      onChange={(e) => setFormData({ ...formData, instantCorrection: e.target.value })}
+                      disabled
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[120px] text-zinc-400"
+                      value={formData.instantCorrection || "Автоматически..."}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Решение (Финальное)</label>
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Решение</label>
                     <textarea 
-                      disabled={!canEditProcessing}
-                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[150px] disabled:opacity-50"
-                      value={formData.finalResolution || ""}
-                      onChange={(e) => setFormData({ ...formData, finalResolution: e.target.value })}
+                      disabled
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[150px] text-zinc-400"
+                      value={formData.finalResolution || "Автоматически..."}
                     />
                   </div>
                 </section>
@@ -662,23 +662,28 @@ export default function RequestDetail() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-10"
               >
+                {/* Block 5: Аналитика */}
                 <section className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm space-y-8">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
                         <FileText size={20} />
                       </div>
-                      <h2 className="text-xl font-black text-zinc-900">Аналитика и обработка причин</h2>
+                      <h2 className="text-xl font-bold text-zinc-900 tracking-tight">5. Аналитика</h2>
                     </div>
+                    <button 
+                      onClick={handleAIAnalyze}
+                      disabled={aiAnalyzing}
+                      className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 disabled:opacity-50"
+                    >
+                      {aiAnalyzing ? (
+                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Zap size={14} />
+                      )}
+                      Провести AI-анализ
+                    </button>
                   </div>
-
-                  {/* Confirmed Classification Display */}
-                  {formData.classificationConfirmed && (
-                    <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-3xl space-y-2">
-                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Подтвержденная классификация</p>
-                      <p className="text-sm font-bold text-emerald-900">{formData.classificationConfirmed}</p>
-                    </div>
-                  )}
 
                   <div className="space-y-4">
                     <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">
@@ -689,59 +694,19 @@ export default function RequestDetail() {
                       className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none min-h-[120px] disabled:opacity-50 focus:ring-4 focus:ring-primary/5 transition-all"
                       value={formData.rootCauseAnalysis || ""}
                       onChange={(e) => setFormData({ ...formData, rootCauseAnalysis: e.target.value })}
-                      placeholder="Опишите основную причину возникновения проблемы..."
+                      placeholder="Опишите основную причину..."
                     />
                   </div>
- 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-zinc-50">
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Подтверждающая информация (Фото)</label>
-                      <div className="grid grid-cols-2 gap-4">
-                        {formData.analyticsPhotos?.map((url, idx) => (
-                          <div key={idx} className="relative group cursor-pointer" onClick={() => setSelectedImage(url)}>
-                            <img src={url} className="w-full h-32 object-cover rounded-2xl border border-zinc-100 shadow-sm" referrerPolicy="no-referrer" />
-                            {canEditAnalytics && (
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const newUrls = [...(formData.analyticsPhotos || [])];
-                                  newUrls.splice(idx, 1);
-                                  setFormData({ ...formData, analyticsPhotos: newUrls });
-                                }}
-                                className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        {canEditAnalytics && (
-                          <label className="h-32 border-2 border-dashed border-zinc-200 rounded-3xl flex flex-col items-center justify-center gap-2 text-zinc-400 hover:text-primary hover:border-primary transition-all cursor-pointer">
-                            <Plus size={24} />
-                            <span className="text-[8px] font-black uppercase tracking-widest text-center px-2">Загрузить фото доказательство</span>
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              className="hidden" 
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  const reader = new FileReader();
-                                  reader.onloadend = () => {
-                                    const newUrls = [...(formData.analyticsPhotos || []), reader.result as string];
-                                    setFormData({ ...formData, analyticsPhotos: newUrls });
-                                  };
-                                  reader.readAsDataURL(file);
-                                }
-                              }}
-                            />
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-zinc-50">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-zinc-50">
+                    <SearchableSelect 
+                      label="Отдел мотивации"
+                      disabled={!canEditAnalytics}
+                      options={dictionaries.motivation_departments?.items || []}
+                      value={formData.motivationDept || ""}
+                      onChange={(val) => setFormData({ ...formData, motivationDept: val })}
+                      placeholder="Выберите отдел..."
+                    />
                     <SearchableSelect 
                       label="Статус обоснованности"
                       disabled={!canEditAnalytics}
@@ -749,6 +714,40 @@ export default function RequestDetail() {
                       value={formData.validityStatus || "выявляется"}
                       onChange={(val) => setFormData({ ...formData, validityStatus: val as any })}
                     />
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">
+                      Корректирующие действия
+                    </label>
+                    <textarea 
+                      disabled={!canEditAnalytics}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none min-h-[120px] disabled:opacity-50 focus:ring-4 focus:ring-primary/5 transition-all"
+                      value={formData.correctiveActions || ""}
+                      onChange={(e) => setFormData({ ...formData, correctiveActions: e.target.value })}
+                      placeholder="Опишите действия..."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-t border-zinc-50 pt-8 mt-4">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">Подтвердить классификацию жалобы</label>
+                       <SearchableSelect 
+                        options={dictionaries.classification?.items || []}
+                        value={formData.classificationConfirmed?.split(' / ')[0] || ""}
+                        onChange={(val) => setFormData({ ...formData, classificationConfirmed: val + ' / ' + (formData.classificationConfirmed?.split(' / ')[1] || "") })}
+                        placeholder="Классификация..."
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">Подтвердить раздел классификации</label>
+                       <SearchableSelect 
+                        options={dictionaries.sections?.groups?.find(g => g.name === (formData.classificationConfirmed?.split(' / ')[0] || formData.classification))?.items || []}
+                        value={formData.classificationConfirmed?.split(' / ')[1] || ""}
+                        onChange={(val) => setFormData({ ...formData, classificationConfirmed: (formData.classificationConfirmed?.split(' / ')[0] || formData.classification) + ' / ' + val })}
+                        placeholder="Раздел..."
+                       />
+                    </div>
                   </div>
                 </section>
               </motion.div>
@@ -759,66 +758,7 @@ export default function RequestDetail() {
 
         {/* Action Sidebar / History */}
         <aside className="space-y-8">
-          {/* Action Recording Card for Managers/Admins */}
-          {((userRole === 'manager' && request?.status === 'in_progress' && !sidebarActions.some(a => a.createdBy === user?.uid)) || 
-            (['admin', 'owner', 'head'].includes(userRole || "") && request?.status !== 'done')) && (
-            <section className="bg-white p-8 rounded-[2.5rem] border border-zinc-200 shadow-xl space-y-6">
-              <div>
-                <h3 className="text-xl font-black text-zinc-900 mb-1">Действие</h3>
-                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Зафиксируйте решение</p>
-              </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest ml-1">Подтвердить класс. / Раздел</label>
-                  <div className="space-y-2">
-                    <SearchableSelect 
-                      options={dictionaries.classification?.items || []}
-                      value={formData.classification || ""}
-                      onChange={(val) => setFormData({ ...formData, classification: val })}
-                      placeholder="Классификация..."
-                    />
-                    <SearchableMultiSelect 
-                      options={[{ 
-                        name: formData.classification || "Разделы", 
-                        items: dictionaries.sections?.groups?.find(g => g.name === formData.classification)?.items || [] 
-                      }]}
-                      value={classificationConfirmed.length > 0 
-                        ? classificationConfirmed 
-                        : (Array.isArray(formData.classificationSection) ? formData.classificationSection : (formData.classificationSection ? [formData.classificationSection] : []))}
-                      onChange={setClassificationConfirmed}
-                      placeholder="Уточните разделы..."
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest ml-1">Мгновенное исправление</label>
-                  <textarea 
-                    className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-3 text-sm font-medium outline-none resize-none min-h-[80px]"
-                    placeholder="Что сделано сразу?"
-                    value={instantFix}
-                    onChange={(e) => setInstantFix(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest ml-1">Финальное решение *</label>
-                  <textarea 
-                    className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-3 text-sm font-bold outline-none resize-none min-h-[120px]"
-                    placeholder="Результат..."
-                    value={resolution}
-                    onChange={(e) => setResolution(e.target.value)}
-                  />
-                </div>
-                <button 
-                  onClick={handleProcess}
-                  disabled={processing || !resolution}
-                  className="w-full py-4 bg-zinc-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-black/20 disabled:opacity-50"
-                >
-                  {processing ? "Обработка..." : "Зафиксировать решение"}
-                </button>
-              </div>
-            </section>
-          )}
 
           <section className="bg-zinc-900 p-8 rounded-[2.5rem] text-white shadow-2xl shadow-zinc-200">
              <h3 className="text-xl font-black mb-6 flex items-center gap-3">

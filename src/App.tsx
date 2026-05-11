@@ -90,18 +90,27 @@ const SidebarItem = ({ to, icon: Icon, label, active }: SidebarItemProps) => {
     <Link
       to={to}
       className={cn(
-        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative",
+        "flex items-center gap-3 px-5 py-3.5 rounded-2xl transition-all duration-300 group relative overflow-hidden",
         active 
-          ? "bg-slate-900 text-white shadow-xl shadow-slate-200/50 scale-100" 
-          : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          ? "bg-slate-900 text-white shadow-2xl shadow-slate-400/20 scale-[1.02]" 
+          : "text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-lg hover:shadow-slate-200/50 hover:scale-[1.01]"
       )}
     >
-      <Icon size={18} strokeWidth={active ? 2.5 : 2} className={cn("transition-all", active ? "text-white" : "text-slate-400 group-hover:text-slate-900")} />
-      <span className={cn("text-sm transition-all", active ? "font-bold tracking-tight" : "font-semibold")}>{label}</span>
       {active && (
         <motion.div 
-          layoutId="active-pill" 
-          className="ml-auto w-1.5 h-1.5 rounded-full bg-accent"
+          layoutId="active-glow"
+          className="absolute inset-0 bg-gradient-to-r from-accent/10 to-transparent pointer-events-none"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5 }}
+        />
+      )}
+      <Icon size={18} strokeWidth={active ? 2.5 : 2} className={cn("transition-all relative z-10", active ? "text-white" : "text-slate-400 group-hover:text-slate-900 group-hover:rotate-6")} />
+      <span className={cn("text-sm transition-all relative z-10", active ? "font-bold tracking-tight" : "font-semibold")}>{label}</span>
+      {active && (
+        <motion.div 
+          layoutId="active-indicator" 
+          className="ml-auto w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)]"
         />
       )}
     </Link>
@@ -126,7 +135,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   menuItems.push({ to: "/requests", icon: MessageSquare, label: "Запросы" });
 
-  if (userRole === 'owner' || userRole === 'admin' || userRole === 'operator' || userRole === 'head') {
+  if (userRole === 'owner' || userRole === 'admin' || userRole === 'operator' || userRole === 'head' || userRole === 'manager') {
     menuItems.push({ to: "/quick-request", icon: Plus, label: "Новое" });
   }
 
@@ -142,11 +151,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     menuItems.push({ to: "/learning-base", icon: FileText, label: "База обучения" });
   }
 
-  if (userRole === 'admin' || userRole === 'operator' || userRole === 'owner') {
+  if (userRole === 'admin' || userRole === 'operator' || userRole === 'owner' || userRole === 'head') {
     menuItems.push({ to: "/analytics", icon: BarChart3, label: "Аналитика" });
   }
 
-  if (userRole === 'manager') {
+  if (userRole === 'manager' || userRole === 'head') {
     menuItems.push({ to: "/give-feedback", icon: MessageCircle, label: "Дать ОС" });
   }
 
@@ -222,21 +231,27 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
 
           <nav className="flex flex-col gap-1.5 flex-1 custom-scrollbar overflow-y-auto pr-2">
-            {menuItems.map((item) => (
-              <SidebarItem 
-                key={item.to} 
-                to={item.to}
-                icon={item.icon}
-                label={item.label}
-                active={location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))} 
-              />
+            {menuItems.map((item, idx) => (
+              <motion.div
+                key={item.to}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.03, duration: 0.4 }}
+              >
+                <SidebarItem 
+                  to={item.to}
+                  icon={item.icon}
+                  label={item.label}
+                  active={location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))} 
+                />
+              </motion.div>
             ))}
           </nav>
 
           <footer className="mt-8 pt-6 border-t border-slate-100">
-            <button 
+            <div 
               onClick={() => navigate('/profile')}
-              className="w-full flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-100 transition-all group"
+              className="w-full flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-100 transition-all group cursor-pointer"
             >
               <div className="relative">
                 <img 
@@ -264,7 +279,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               >
                 <LogOut size={16} />
               </button>
-            </button>
+            </div>
           </footer>
         </div>
       </aside>
@@ -312,21 +327,33 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </div>
 
               <nav className="flex flex-col gap-2 flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                {menuItems.map((item) => (
-                  <Link
+                {menuItems.map((item, idx) => (
+                  <motion.div
                     key={item.to}
-                    to={item.to}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={cn(
-                      "flex items-center gap-4 p-5 rounded-2xl transition-all border border-transparent",
-                      location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))
-                        ? "bg-slate-900 text-white shadow-xl shadow-slate-900/20" 
-                        : "text-slate-600 hover:bg-slate-50 hover:border-slate-100"
-                    )}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.05 }}
                   >
-                    <item.icon size={22} />
-                    <span className="text-[17px] font-bold">{item.label}</span>
-                  </Link>
+                    <Link
+                      to={item.to}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-4 p-5 rounded-3xl transition-all border border-transparent relative overflow-hidden",
+                        location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))
+                          ? "bg-slate-900 text-white shadow-2xl shadow-slate-900/20 active:scale-95" 
+                          : "text-slate-600 hover:bg-slate-50 hover:border-slate-100"
+                      )}
+                    >
+                      {(location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))) && (
+                         <motion.div 
+                           layoutId="active-glow-mobile"
+                           className="absolute inset-0 bg-gradient-to-r from-accent/10 to-transparent pointer-events-none"
+                         />
+                      )}
+                      <item.icon size={22} className={cn("relative z-10", (location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))) ? "text-white" : "text-slate-400")} />
+                      <span className="text-[17px] font-bold relative z-10">{item.label}</span>
+                    </Link>
+                  </motion.div>
                 ))}
               </nav>
 

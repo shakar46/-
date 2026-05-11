@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, getDocs, orderBy, where, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, getDocs, orderBy, where } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { 
@@ -10,18 +10,18 @@ import {
   ChevronRight, 
   Clock,
   User,
-  CheckCircle2,
   Trash2,
   ArrowUpDown,
-  X,
   AlertCircle,
-  MessageSquare
+  MessageSquare,
+  Calendar
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { BRANCH_NAMES } from "../constants";
 import { CRMRequest } from "../types";
 import { useFirebase } from "../components/FirebaseProvider";
+import { SearchableSelect } from "../components/SearchableSelect";
 import * as XLSX from "xlsx";
 import { safeFormat } from "../utils/dateUtils";
 import { cn } from "../lib/utils";
@@ -35,6 +35,9 @@ export default function Requests() {
   const [statusFilter, setStatusFilter] = useState("Все");
   const [branchFilter, setBranchFilter] = useState("Все");
   const [importanceFilter, setImportanceFilter] = useState("Все");
+  const [classificationFilter, setClassificationFilter] = useState("Все");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [sortField, setSortField] = useState<string>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
@@ -111,6 +114,14 @@ export default function Requests() {
     const matchesSearch = 
       r.clientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.clientPhone?.includes(searchQuery) ||
+      r.message?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.classification?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (Array.isArray(r.classificationSection) 
+        ? r.classificationSection.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
+        : r.classificationSection?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      r.branchId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.branchName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.finalResolution?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (r.id && r.id.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesStatus = statusFilter === "Все" || 
@@ -122,8 +133,13 @@ export default function Requests() {
     
     const matchesBranch = userRole === 'manager' || branchFilter === "Все" || r.branchName === branchFilter || r.branchId === branchFilter;
     const matchesImportance = importanceFilter === "Все" || r.significance === importanceFilter;
+    const matchesClassification = classificationFilter === "Все" || r.classification === classificationFilter;
 
-    return matchesSearch && matchesStatus && matchesBranch && matchesImportance;
+    const requestDate = r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt || 0);
+    const matchesDate = (!startDate || requestDate >= new Date(startDate)) && 
+                        (!endDate || requestDate <= new Date(endDate + "T23:59:59"));
+
+    return matchesSearch && matchesStatus && matchesBranch && matchesImportance && matchesClassification && matchesDate;
   }).sort((a, b) => {
     const valA = (a as any)[sortField];
     const valB = (b as any)[sortField];
@@ -162,7 +178,9 @@ export default function Requests() {
       "Телефон": r.clientPhone,
       "Филиал": r.branchId,
       "Категория": r.classification,
-      "Статус": r.status || "new"
+      "Статус": r.status || "new",
+      "Сообщение": r.message,
+      "Решение": r.finalResolution
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -170,6 +188,9 @@ export default function Requests() {
     XLSX.utils.book_append_sheet(wb, ws, "Requests");
     XLSX.writeFile(wb, `Requests_${safeFormat(new Date(), "dd_MM_yyyy")}.xlsx`);
   };
+
+  const branchOptions = ["Все", ...(dictionaries.branch_names?.items || BRANCH_NAMES)];
+  const classificationOptions = ["Все", ...(dictionaries.classification?.items || [])];
 
   return (
     <div className="space-y-10 pb-20">
@@ -195,7 +216,7 @@ export default function Requests() {
             <Download size={18} />
             Экспорт
           </button>
-          {userRole !== 'manager' && (
+          {(userRole === 'admin' || userRole === 'owner' || userRole === 'head' || userRole === 'manager') && (
             <Link
               to="/quick-request"
               className="flex items-center gap-2 bg-slate-900 text-white px-8 py-4 rounded-2xl font-bold text-sm tracking-tight interactive-scale shadow-xl shadow-slate-200"
@@ -214,7 +235,7 @@ export default function Requests() {
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-900 transition-colors" size={20} />
             <input
               type="text"
-              placeholder="Поиск по клиенту, телефону или ID..."
+              placeholder="Глобальный поиск по всем полям..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-slate-50/50 border border-slate-100 rounded-2xl pl-14 pr-6 py-4 text-sm font-bold focus:bg-white focus:ring-4 focus:ring-accent/5 outline-none transition-all placeholder:text-slate-400"
@@ -240,60 +261,101 @@ export default function Requests() {
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden"
             >
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 pt-8 border-t border-slate-50 mt-8">
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Статус решения</label>
-                  <select 
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-accent/5 transition-all shadow-sm"
-                  >
-                    <option>Все</option>
-                    <option>Новый</option>
-                    <option>В работе</option>
-                    <option>На проверке</option>
-                    <option>Выполнено</option>
-                    <option>Отменен</option>
-                  </select>
-                </div>
-                {userRole !== 'manager' && (
+              <div className="pt-8 border-t border-slate-50 mt-8 space-y-8">
+                {/* Row 1: Selects */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Локация / Филиал</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Статус решения</label>
                     <select 
-                      value={branchFilter}
-                      onChange={(e) => setBranchFilter(e.target.value)}
-                      className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-accent/5 transition-all shadow-sm"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-accent/5 transition-all shadow-sm"
                     >
                       <option>Все</option>
-                      {(dictionaries.branch_names?.items || BRANCH_NAMES).map((b: string) => <option key={b}>{b}</option>)}
+                      <option>Новый</option>
+                      <option>В работе</option>
+                      <option>На проверке</option>
+                      <option>Выполнено</option>
+                      <option>Отменен</option>
                     </select>
                   </div>
-                )}
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Степень важности</label>
-                  <select 
-                    value={importanceFilter}
-                    onChange={(e) => setImportanceFilter(e.target.value)}
-                    className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-accent/5 transition-all shadow-sm"
-                  >
-                    <option>Все</option>
-                    <option>Критическая</option>
-                    <option>Средняя</option>
-                    <option>Низкая</option>
-                  </select>
+                  {userRole !== 'manager' && (
+                    <div className="space-y-3">
+                      <SearchableSelect 
+                        label="Локация / Филиал"
+                        options={branchOptions}
+                        value={branchFilter}
+                        onChange={setBranchFilter}
+                        placeholder="Все филиалы"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-3">
+                    <SearchableSelect 
+                      label="Классификация"
+                      options={classificationOptions}
+                      value={classificationFilter}
+                      onChange={setClassificationFilter}
+                      placeholder="Все категории"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Степень важности</label>
+                    <select 
+                      value={importanceFilter}
+                      onChange={(e) => setImportanceFilter(e.target.value)}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-accent/5 transition-all shadow-sm"
+                    >
+                      <option>Все</option>
+                      <option>Критическая</option>
+                      <option>Средняя</option>
+                      <option>Низкая</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="flex items-end">
-                  <button 
-                    onClick={() => {
-                      setStatusFilter("Все");
-                      setBranchFilter("Все");
-                      setImportanceFilter("Все");
-                      setSearchQuery("");
-                    }}
-                    className="w-full py-4 text-[10px] font-black text-slate-400 hover:text-accent uppercase tracking-widest transition-colors border border-dashed border-slate-100 rounded-2xl hover:bg-slate-50"
-                  >
-                    Сбросить настройки
-                  </button>
+
+                {/* Row 2: Date Range & Actions */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-end">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Дата от</label>
+                    <div className="relative">
+                      <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input 
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl pl-12 pr-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-accent/5 transition-all shadow-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Дата до</label>
+                    <div className="relative">
+                      <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input 
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl pl-12 pr-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-accent/5 transition-all shadow-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => {
+                        setStatusFilter("Все");
+                        setBranchFilter("Все");
+                        setImportanceFilter("Все");
+                        setClassificationFilter("Все");
+                        setStartDate("");
+                        setEndDate("");
+                        setSearchQuery("");
+                      }}
+                      className="flex-1 py-4 text-[10px] font-black text-slate-400 hover:text-accent uppercase tracking-widest transition-colors border border-dashed border-slate-100 rounded-2xl hover:bg-slate-50"
+                    >
+                      Сбросить всё
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>

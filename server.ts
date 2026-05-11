@@ -2,7 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import * as googleSheets from "./server/googleSheets.ts";
-import admin from "firebase-admin";
+import { initializeApp, cert, getApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import dotenv from "dotenv";
@@ -45,31 +45,36 @@ const firebaseAdminConfig = {
   databaseId: firebaseConfig.firestoreDatabaseId || "(default)"
 };
 
+let appInstance: any = null;
+
 if (firebaseAdminConfig.projectId && firebaseAdminConfig.clientEmail && firebaseAdminConfig.privateKey) {
   try {
-    if (admin.apps.length === 0) {
-      admin.initializeApp({
-        credential: admin.credential.cert({
+    if (getApps().length === 0) {
+      appInstance = initializeApp({
+        credential: cert({
           projectId: firebaseAdminConfig.projectId,
           clientEmail: firebaseAdminConfig.clientEmail,
           privateKey: firebaseAdminConfig.privateKey,
         }),
       });
+    } else {
+      appInstance = getApp();
     }
     // Always ensure settings are applied to the default firestore instance
-    admin.firestore().settings({ ignoreUndefinedProperties: true });
+    getFirestore(appInstance).settings({ ignoreUndefinedProperties: true });
   } catch (err) {
     console.error("Firebase Admin initialization failed:", err);
   }
 }
 
-const db = admin.apps.length > 0 ? getFirestore(admin.app(), firebaseAdminConfig.databaseId) : null;
-const auth = admin.apps.length > 0 ? getAuth(admin.app()) : null;
+const db = getApps().length > 0 ? getFirestore(getApp(), firebaseAdminConfig.databaseId) : null;
+const auth = getApps().length > 0 ? getAuth(getApp()) : null;
 const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 async function startServer() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "150mb" }));
+  app.use(express.urlencoded({ limit: "150mb", extended: true }));
 
   const logAction = async (userId: string, action: string, entityType: string, entityId?: string, changes?: any) => {
     if (!db) return;
@@ -105,13 +110,14 @@ async function startServer() {
     }
   };
 
-  // Audit Logging Route
   app.post("/api/audit/log", async (req, res) => {
     if (!auth || !db) return res.status(500).json({ success: false, error: "Firebase missing" });
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ success: false, error: "Unauthorized" });
     try {
-      const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
+      const token = authHeader.split(" ")[1];
+      if (!token) return res.status(401).json({ success: false, error: "Token missing" });
+      const decodedToken = await auth.verifyIdToken(token);
       const { action, entityType, entityId, metadata } = req.body;
       await logAction(decodedToken.uid, action, entityType, entityId, metadata);
       res.json({ success: true });
@@ -431,6 +437,75 @@ ${poisoningDetails ? `
     }
   });
 
+  app.post("/api/admin/updateEmployee", async (req, res) => {
+    if (!auth || !db) return res.status(500).json({ success: false, error: "Firebase missing" });
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, error: "Unauthorized" });
+    try {
+      const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
+      if (decodedToken.role !== 'admin' && decodedToken.role !== 'owner' && decodedToken.role !== 'head') {
+        return res.status(403).json({ success: false, error: "ACCESS_DENIED" });
+      }
+      const { targetUid, name, role, phone, branchId, password } = req.body;
+      const updates: any = {};
+      if (name) updates.displayName = name;
+      if (password) updates.password = password;
+      if (phone) updates.phoneNumber = phone.startsWith('+') ? phone : `+${phone}`;
+
+      if (Object.keys(updates).length > 0) {
+        await auth.updateUser(targetUid, updates);
+      }
+      
+      if (role || branchId) {
+        await auth.setCustomUserClaims(targetUid, { role, branchId });
+      }
+
+      await db.collection("users").doc(targetUid).update({
+        displayName: name || undefined,
+        role: role || undefined,
+        branchId: branchId || undefined,
+        phone: phone || undefined,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      await logAction(decodedToken.uid, `Обновлен сотрудник: ${targetUid}`, "User", targetUid);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/admin/setUserRole", async (req, res) => {
+    if (!auth || !db) return res.status(500).json({ success: false, error: "Firebase missing" });
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, error: "Unauthorized" });
+    try {
+      const decodedToken = await auth.verifyIdToken(authHeader.split(" ")[1]);
+      if (decodedToken.role !== 'admin' && decodedToken.role !== 'owner' && decodedToken.role !== 'head') {
+        return res.status(403).json({ success: false, error: "ACCESS_DENIED" });
+      }
+      const { targetUid, role } = req.body;
+      const userDoc = await db.collection("users").doc(targetUid).get();
+      const currentClaims = userDoc.exists ? (userDoc.data()?.responsibleBranch || null) : null;
+      
+      await auth.setCustomUserClaims(targetUid, { role, branchId: currentClaims });
+      await db.collection("users").doc(targetUid).update({
+        role,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      await logAction(decodedToken.uid, `Изменена роль пользователя ${targetUid} на ${role}`, "User", targetUid);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // API 404 Handler
+  app.use("/api/*", (req, res) => {
+    res.status(404).json({ success: false, error: `API route ${req.originalUrl} not found` });
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
@@ -438,6 +513,25 @@ ${poisoningDetails ? `
     app.use(express.static("dist"));
     app.get("*", (req, res) => res.sendFile(path.resolve("dist/index.html")));
   }
+
+  // Error Handler
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("Express Error:", err);
+    
+    // Always return JSON for API routes
+    if (req.path.startsWith("/api/")) {
+      if (err.type === "entity.too.large") {
+        return res.status(413).json({ success: false, error: "Payload too large. Please reduce image sizes." });
+      }
+      return res.status(err.status || 500).json({ 
+        success: false, 
+        error: err.message || "Internal Server Error" 
+      });
+    }
+    
+    next(err);
+  });
+
   app.listen(3000, "0.0.0.0", () => console.log("Server running"));
 }
 startServer();
