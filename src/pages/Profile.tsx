@@ -183,28 +183,32 @@ export const Profile = () => {
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4 space-y-10">
-      <div className="flex flex-col md:flex-row items-center gap-6 justify-between">
-        <div className="flex items-center gap-6">
+      <div className="flex flex-col md:flex-row items-center gap-8 justify-between bg-white p-10 rounded-[3rem] premium-shadow border border-slate-50 mb-12">
+        <div className="flex items-center gap-8">
           <div className="relative group">
-            <div className="w-24 h-24 bg-gradient-to-br from-zinc-800 to-black rounded-[2rem] flex items-center justify-center text-white shadow-2xl relative overflow-hidden">
+            <div className="w-28 h-28 bg-slate-900 rounded-[2.5rem] flex items-center justify-center text-white shadow-2xl relative overflow-hidden group-hover:scale-105 transition-transform duration-500">
               {formData.profilePhoto ? (
                 <img src={formData.profilePhoto} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                <User size={40} />
+                <User size={48} strokeWidth={1.5} />
               )}
-              <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                <Camera size={24} className="text-white" />
+              <label className="absolute inset-0 bg-slate-900/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-sm">
+                <Camera size={26} className="text-white" />
                 <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
               </label>
             </div>
+            <div className="absolute -bottom-2 -right-2 bg-success text-white w-10 h-10 rounded-2xl flex items-center justify-center border-4 border-white shadow-lg">
+              <CheckCircle size={18} />
+            </div>
           </div>
           <div>
-            <h1 className="text-3xl font-black tracking-tight">{userData?.displayName || 'Пользователь'}</h1>
-            <p className="text-zinc-500 font-medium">@{userData?.nickname || userData?.login || 'username'}</p>
+            <span className="text-accent font-bold text-[10px] uppercase tracking-[0.25em] mb-2 block">Профиль подтвержден</span>
+            <h1 className="text-4xl font-bold tracking-tight text-slate-900 leading-none mb-2">{userData?.displayName || 'Пользователь'}</h1>
+            <p className="text-slate-400 font-medium text-lg leading-none">@{userData?.nickname || userData?.login || 'username'}</p>
           </div>
         </div>
-        <div className="flex bg-zinc-100 p-1 rounded-2xl">
-           <button onClick={logout} className="px-6 py-2 rounded-xl text-sm font-bold text-rose-500 hover:bg-white transition-all">Выйти</button>
+        <div className="flex bg-slate-50 p-2 rounded-2xl border border-slate-100">
+           <button onClick={logout} className="px-8 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-white hover:shadow-sm transition-all active:scale-95">Выйти из системы</button>
         </div>
       </div>
 
@@ -214,69 +218,69 @@ export const Profile = () => {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-[2.5rem] border border-zinc-200 shadow-sm overflow-hidden"
+            className="bg-white rounded-[3rem] border border-slate-100 premium-shadow overflow-hidden"
           >
-            <div className="p-8 md:p-10">
-              <div className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-100">
-                <h3 className="text-xl font-black flex items-center gap-2">
-                  <Pencil size={20} className="text-zinc-400" />
-                  Редактировать данные
+            <div className="p-10 lg:p-12">
+              <div className="flex items-center justify-between mb-10 pb-6 border-b border-slate-50">
+                <h3 className="text-2xl font-bold tracking-tight flex items-center gap-3">
+                  <Pencil size={24} className="text-slate-200" />
+                  Личные данные
                 </h3>
               </div>
-              <form onSubmit={handleSaveProfile} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-black text-zinc-400 uppercase tracking-widest mb-2 ml-1">Имя профиля</label>
+              <form onSubmit={handleSaveProfile} className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">ФИО Пользователя</label>
                     <input 
                       type="text"
                       value={formData.displayName}
                       onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                      className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-accent/5 outline-none transition-all font-bold text-slate-900"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-black text-zinc-400 uppercase tracking-widest mb-2 ml-1">Никнейм</label>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Публичный Никнейм</label>
                     <input 
                       type="text"
                       value={formData.nickname}
                       onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
                       placeholder="@nickname"
-                      className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-accent/5 outline-none transition-all font-bold text-slate-900"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-black text-zinc-400 uppercase tracking-widest mb-2 ml-1">Логин</label>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">ID Входа (Логин)</label>
                     <input 
                       type="text"
                       disabled
                       value={formData.login}
-                      className="w-full px-5 py-4 bg-zinc-100 border border-zinc-200 rounded-2xl outline-none font-bold text-zinc-500 cursor-not-allowed"
+                      className="w-full px-6 py-4 bg-slate-100 border border-slate-100 rounded-2xl outline-none font-bold text-slate-400 cursor-not-allowed"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-black text-zinc-400 uppercase tracking-widest mb-2 ml-1">Телефон</label>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Контактный Номер</label>
                     <input 
                       type="tel"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       placeholder="+998 (__) ___-__-__"
-                      className="w-full px-5 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-black outline-none transition-all font-bold"
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-accent/5 outline-none transition-all font-bold text-slate-900"
                     />
                   </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-4 pt-4">
+                <div className="flex flex-col md:flex-row gap-4 pt-6">
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="flex-1 bg-black text-white py-4 rounded-2xl font-black hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-black/10 flex items-center justify-center gap-3 disabled:opacity-50"
+                    className="flex-1 bg-slate-900 text-white py-5 rounded-[2rem] font-bold hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-3 disabled:opacity-50"
                   >
                     {isSubmitting ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "Сохранить изменения"}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowPasswordModal(true)}
-                    className="md:w-max px-8 bg-zinc-100 text-zinc-900 py-4 rounded-2xl font-black hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
+                    className="md:w-max px-10 bg-slate-50 text-slate-900 py-5 rounded-[2rem] font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 active:scale-95 border border-slate-100"
                   >
                     <Lock size={18} />
                     Сменить пароль
@@ -284,8 +288,8 @@ export const Profile = () => {
                 </div>
 
                 {success && (
-                  <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl text-xs font-bold flex items-center gap-2 border border-emerald-100">
-                    <CheckCircle size={16} /> Данные успешно обновлены
+                  <div className="p-5 bg-success/10 text-success rounded-[1.5rem] text-sm font-bold flex items-center gap-3 border border-success/10">
+                    <CheckCircle size={20} /> Профиль успешно обновлен в системе
                   </div>
                 )}
               </form>

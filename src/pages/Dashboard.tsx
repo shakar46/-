@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, getDocs, orderBy, limit, where } from "firebase/firestore";
+import { collection, query, getDocs, orderBy, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { 
@@ -11,7 +11,9 @@ import {
   Users,
   ChevronRight,
   ArrowUpRight,
-  ArrowDownRight
+  Globe,
+  Zap,
+  Plus
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { format, startOfDay } from "date-fns";
@@ -20,15 +22,58 @@ import { motion } from "motion/react";
 import { cn } from "../lib/utils";
 import { useFirebase } from "../components/FirebaseProvider";
 
+const StatCard = ({ title, value, icon: Icon, colorClass }: { title: string, value: number, icon: any, colorClass: string }) => (
+  <motion.div 
+    whileHover={{ y: -4 }}
+    className="bg-white p-8 rounded-[2rem] border border-slate-100 premium-shadow group relative overflow-hidden"
+  >
+    <div className={cn("absolute -right-6 -bottom-6 w-32 h-32 opacity-[0.03] transition-transform duration-700 group-hover:scale-125 group-hover:rotate-12", colorClass)}>
+      <Icon size={128} />
+    </div>
+    
+    <div className="flex items-center justify-between mb-10 relative z-10">
+      <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner font-bold", colorClass.replace('text-', 'bg-') + "/10", colorClass)}>
+        <Icon size={26} strokeWidth={2.5} />
+      </div>
+      <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-white transition-colors duration-300">
+        <ArrowUpRight size={16} />
+      </div>
+    </div>
+    
+    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 relative z-10">{title}</p>
+    <div className="flex items-baseline gap-2 relative z-10">
+      <h4 className="text-4xl font-bold tracking-tight text-slate-900">{value}</h4>
+      <span className="text-[10px] text-slate-400 font-bold tracking-tighter">Ед.</span>
+    </div>
+  </motion.div>
+);
+
+const BranchProgress = ({ name, count, total, index }: { name: string, count: number, total: number, index: number }) => (
+  <div className="space-y-3">
+    <div className="flex justify-between items-end">
+      <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">{name}</span>
+      <span className="text-slate-900 font-bold text-base">{count}</span>
+    </div>
+    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+      <motion.div 
+        initial={{ width: 0 }}
+        animate={{ width: `${(count / (total || 1)) * 100}%` }}
+        transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1], delay: index * 0.1 }}
+        className="h-full bg-slate-900 rounded-full shadow-[0_0_10px_rgba(15,23,42,0.1)]" 
+      />
+    </div>
+  </div>
+);
+
 export default function Dashboard() {
-  const { userRole, userData } = useFirebase();
+  const { userRole, userData, user } = useFirebase();
   const [stats, setStats] = useState({
     total: 0,
     new: 0,
     inWork: 0,
     completed: 0,
     recentAppeals: [] as any[],
-    topBranches: [] as { name: string, count: number, color: string }[]
+    topBranches: [] as { name: string, count: number }[]
   });
   const [loading, setLoading] = useState(true);
 
@@ -37,7 +82,6 @@ export default function Dashboard() {
       try {
         const todayStart = startOfDay(new Date());
 
-        // Fetch only today's requests for the list and stats
         const q = query(
           collection(db, "requests"), 
           where("createdAt", ">=", todayStart),
@@ -46,12 +90,9 @@ export default function Dashboard() {
         const querySnapshot = await getDocs(q);
         let todayRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
         
-        // Filter by branch for managers
         if (userRole === 'manager' && userData?.branchId) {
           todayRequests = todayRequests.filter(r => r.branchId === userData.branchId);
         }
-
-        const recent = todayRequests;
 
         const branchCounts = todayRequests.reduce((acc: any, curr: any) => {
           const bName = curr.branchId || "Неизвестно";
@@ -59,15 +100,13 @@ export default function Dashboard() {
           return acc;
         }, {});
 
-        const colors = ["bg-black", "bg-zinc-400", "bg-zinc-200", "bg-zinc-100"];
         const topBranches = Object.entries(branchCounts)
-          .map(([name, count], i) => ({ 
+          .map(([name, count]) => ({ 
             name, 
-            count: count as number, 
-            color: colors[i % colors.length] 
+            count: count as number
           }))
           .sort((a, b) => b.count - a.count)
-          .slice(0, 4);
+          .slice(0, 5);
 
         const convertToDate = (val: any) => {
           if (!val) return null;
@@ -87,181 +126,209 @@ export default function Dashboard() {
           topBranches
         });
       } catch (error) {
+        console.error("Dashboard data fetch error:", error);
         handleFirestoreError(error, OperationType.LIST, "requests");
       }
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [userRole, userData?.branchId]);
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Доброе утро";
+    if (hour < 18) return "Добрый день";
+    return "Добрый вечер";
+  };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin" /></div>;
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh]">
+        <motion.div 
+          animate={{ scale: [1, 1.1, 1], rotate: 360 }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+          className="w-12 h-12 border-4 border-slate-100 border-t-slate-900 rounded-full mb-4" 
+        />
+        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] animate-pulse">Инициализация данных...</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-12">
-      <header className="bg-white p-10 rounded-[3rem] shadow-sm border border-zinc-100 relative overflow-hidden group">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -mr-48 -mt-48 group-hover:bg-primary/10 transition-all duration-1000" />
-        <div className="relative z-10">
-          <motion.h1 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="text-5xl font-black tracking-tighter mb-4 text-[#1F2937]"
-          >
-            Обзор системы
-          </motion.h1>
-          <motion.p 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="text-zinc-400 text-lg font-medium leading-relaxed max-w-xl"
-          >
-            Добро пожаловать в пульс вашей компании. Все ключевые показатели и новые обращения в одном месте.
-          </motion.p>
+      {/* Header Section */}
+      <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-2">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-accent font-bold text-[10px] uppercase tracking-[0.25em]">{getGreeting()}, {user?.displayName?.split(' ')[0] || "Герой"}!</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+          </div>
+          <h1 className="text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 leading-[1.1]">
+            Ваш обзор сессии
+          </h1>
+          <p className="text-slate-400 text-lg mt-3 max-w-lg font-medium leading-relaxed">
+            Сегодня система зафиксировала <span className="text-slate-900 font-bold">{stats.total} обращения</span>. Вот краткий дайджест активности.
+          </p>
         </div>
-      </header>
+        <div className="flex items-center gap-4">
+          <Link 
+            to="/quick-request"
+            className="flex items-center gap-2 bg-slate-900 text-white px-6 py-4 rounded-2xl font-bold text-sm tracking-tight interactive-scale shadow-xl shadow-slate-200"
+          >
+            <Plus size={18} />
+            Быстрый ввод
+          </Link>
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        <StatCard title="Всего сегодня" value={stats.total} icon={MessageSquare} />
-        <StatCard title="Новые" value={stats.new} icon={AlertCircle} color="text-primary" />
-        <StatCard title="В работе" value={stats.inWork} icon={Clock} color="text-warning" />
-        <StatCard title="Завершено" value={stats.completed} icon={CheckCircle2} color="text-success" />
+      {/* Main Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="Всего сегодня" value={stats.total} icon={MessageSquare} colorClass="text-slate-900" />
+        <StatCard title="Новые в очереди" value={stats.new} icon={AlertCircle} colorClass="text-accent" />
+        <StatCard title="В обработке" value={stats.inWork} icon={Clock} colorClass="text-warning" />
+        <StatCard title="Успешно решено" value={stats.completed} icon={CheckCircle2} colorClass="text-success" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-        <div className="lg:col-span-2 space-y-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.8fr_1fr] gap-10">
+        {/* Recent Activity */}
+        <div className="space-y-8">
           <div className="flex items-center justify-between px-2">
-            <h3 className="text-3xl font-black tracking-tight text-[#1F2937]">Последние обращения</h3>
-            <Link to="/requests" className="flex items-center gap-2 text-primary font-black text-sm uppercase tracking-widest hover:translate-x-1 transition-transform">
-              Смотреть все <ArrowUpRight size={18} />
+            <div className="flex items-center gap-3">
+              <h3 className="text-2xl font-bold tracking-tight">Последние записи</h3>
+              <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md text-[10px] font-black uppercase">{stats.recentAppeals.length}</span>
+            </div>
+            <Link to="/requests" className="flex items-center gap-2 text-accent font-bold text-[10px] uppercase tracking-[0.2em] hover:translate-x-1 transition-transform">
+              Архив запросов <ChevronRight size={14} />
             </Link>
           </div>
           
-          <div className="bg-white rounded-[3rem] border border-zinc-100 shadow-sm overflow-hidden">
-            <div className="divide-y divide-zinc-50 max-h-[1000px] overflow-y-auto custom-scrollbar scroll-smooth">
-              {stats.recentAppeals.map((request, index) => (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  key={request.id}
+          <div className="bg-white rounded-[2.5rem] border border-slate-100 premium-shadow divide-y divide-slate-50 overflow-hidden">
+            {stats.recentAppeals.slice(0, 6).map((request, index) => (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+                key={request.id}
+              >
+                <Link 
+                  to={`/requests/${request.id}`}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-6 sm:p-8 hover:bg-slate-50 transition-all group relative"
                 >
-                  <Link 
-                    to={`/requests/${request.id}`}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between p-8 hover:bg-zinc-50 transition-all group relative"
-                  >
-                    <div className="flex items-center gap-6">
-                      <div className="w-16 h-16 rounded-[1.5rem] bg-zinc-50 flex items-center justify-center text-zinc-300 group-hover:bg-primary group-hover:text-white group-hover:rotate-6 transition-all shadow-sm">
-                        <MessageSquare size={28} />
+                  <div className="flex items-center gap-6">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-slate-900 group-hover:text-white transition-all duration-300">
+                      <MessageSquare size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-lg text-slate-900 leading-tight mb-1 group-hover:text-accent transition-colors">
+                        {request.clientName || "Анонимный гость"}
+                      </h4>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{request.branchId}</span>
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{request.classification || "Категория не указана"}</span>
                       </div>
-                      <div>
-                        <h4 className="font-black text-xl text-[#1F2937] leading-tight mb-1">{request.clientName}</h4>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{request.classification || "Без категории"}</span>
-                          <span className="w-1 h-1 rounded-full bg-zinc-200" />
-                          <span className="text-[10px] font-black text-primary uppercase tracking-widest">{request.branchId}</span>
-                        </div>
-                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-6 mt-4 sm:mt-0">
+                    <div className="text-right hidden md:block">
+                      <p className="text-sm font-bold text-slate-900">
+                        {request._date ? format(request._date, "HH:mm") : "—"}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                        {request._date ? format(request._date, "d MMMM", { locale: ru }) : "—"}
+                      </p>
                     </div>
                     
-                    <div className="flex items-center gap-8 mt-6 sm:mt-0">
-                      <div className="text-right hidden sm:block">
-                        <p className="text-sm font-black text-[#1F2937]">
-                          {request._date ? format(request._date, "HH:mm") : "—"}
-                        </p>
-                        <p className="text-[10px] text-zinc-400 font-black uppercase tracking-[0.2em]">
-                          {request._date ? format(request._date, "d MMM", { locale: ru }) : "—"}
-                        </p>
-                      </div>
-                      
-                      <div className={cn(
-                        "px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm",
-                        request.status === "in_progress" ? "bg-primary/5 text-primary border-primary/10" : 
-                        request.status === "done" ? "bg-success/5 text-success border-success/10" : 
-                        "bg-zinc-100 text-zinc-500 border-zinc-200"
-                      )}>
-                        {request.status === "in_progress" ? "В работе" : "Выполнено"}
-                      </div>
-                      
-                      <div className="w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center text-zinc-300 group-hover:text-primary transition-colors">
-                        <ChevronRight size={24} />
-                      </div>
+                    <div className={cn(
+                      "px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border shadow-sm",
+                      request.status === "in_progress" ? "bg-warning/10 text-warning border-warning/10" : 
+                      request.status === "done" ? "bg-success/10 text-success border-success/10" : 
+                      request.status === "new" ? "bg-accent/10 text-accent border-accent/10" :
+                      "bg-slate-100 text-slate-500 border-slate-200"
+                    )}>
+                      {request.status === "in_progress" ? "В работе" : 
+                       request.status === "done" ? "Решено" : 
+                       request.status === "new" ? "Новый" : "Архив"}
                     </div>
-                  </Link>
-                </motion.div>
-              ))}
-              {stats.recentAppeals.length === 0 && (
-                <div className="p-16 text-center">
-                  <p className="text-zinc-400 font-black text-sm uppercase tracking-[0.3em] mb-4">Жалоб пока нет</p>
-                  <Link to="/quick-request" className="inline-block bg-primary text-white px-8 py-4 rounded-[1.5rem] font-black tracking-widest shadow-xl shadow-primary/20">Добавить первую</Link>
+                    
+                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 group-hover:text-slate-900 group-hover:bg-slate-100 transition-all">
+                      <ChevronRight size={20} />
+                    </div>
+                  </div>
+                </Link>
+              </motion.div>
+            ))}
+            {stats.recentAppeals.length === 0 && (
+              <div className="py-24 text-center">
+                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle2 size={40} className="text-slate-200" />
                 </div>
-              )}
-            </div>
+                <p className="text-slate-900 font-bold text-lg mb-2 tracking-tight">Рабочая нагрузка снята</p>
+                <p className="text-slate-400 text-sm mb-10 max-w-xs mx-auto">Все текущие обращения обработаны и закрыты. Хорошая работа!</p>
+                <Link to="/quick-request" className="inline-flex items-center gap-2 bg-slate-900 text-white px-8 py-4 rounded-2xl font-bold text-sm tracking-tight active:scale-95 transition-transform shadow-xl shadow-slate-200">
+                  <Plus size={18} />
+                  Создать запись
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
+        {/* Sidebar / Top Branches */}
         {userRole !== 'manager' && (
           <div className="space-y-8">
-            <h3 className="text-3xl font-black tracking-tight text-[#1F2937] px-2">Активность</h3>
+            <h3 className="text-2xl font-bold tracking-tight px-2">Локации</h3>
             
-            <div className="bg-[#1F2937] p-10 rounded-[3.5rem] shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
-              <h4 className="text-white font-black text-xl mb-10 tracking-tight">Топ филиалов</h4>
-              <div className="space-y-8">
+            <div className="bg-white p-10 rounded-[3rem] premium-shadow border border-slate-100 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-1000" />
+              <div className="flex items-center gap-3 mb-10">
+                <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white">
+                  <Globe size={20} />
+                </div>
+                <div>
+                  <h4 className="text-slate-900 font-bold text-lg tracking-tight leading-none">Филиалы</h4>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Топ по нагрузке</p>
+                </div>
+              </div>
+              
+              <div className="space-y-8 mb-10">
                 {stats.topBranches.length > 0 ? stats.topBranches.map((item, i) => (
-                  <div key={i} className="space-y-3">
-                    <div className="flex justify-between items-end">
-                      <span className="text-zinc-400 text-[10px] font-black uppercase tracking-[0.2em]">{item.name}</span>
-                      <span className="text-white font-black text-lg">{item.count}</span>
-                    </div>
-                    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(item.count / stats.topBranches[0].count) * 100}%` }}
-                        transition={{ duration: 1, ease: "easeOut", delay: i * 0.1 }}
-                        className="h-full bg-primary shadow-[0_0_15px_rgba(47,128,237,0.5)]" 
-                      />
-                    </div>
-                  </div>
+                  <BranchProgress 
+                    key={item.name}
+                    name={item.name}
+                    count={item.count}
+                    total={stats.topBranches[0].count}
+                    index={i}
+                  />
                 )) : (
-                  <p className="text-xs text-zinc-500 text-center py-10 italic">Данные отсутствуют</p>
+                  <div className="py-10 text-center border-2 border-dashed border-slate-50 rounded-3xl">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic">Нет данных для анализа</p>
+                  </div>
                 )}
               </div>
               
-              <Link to="/analytics" className="mt-12 w-full flex items-center justify-center gap-3 bg-white/10 hover:bg-white/20 text-white py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] transition-all">
-                Подробная аналитика <TrendingUp size={16} />
+              <Link to="/analytics" className="w-full flex items-center justify-center gap-3 bg-slate-50 hover:bg-slate-900 hover:text-white py-5 rounded-[2rem] font-bold text-[10px] uppercase tracking-[0.25em] transition-all group/btn border border-slate-100">
+                Полный отчет <ArrowUpRight size={16} className="group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
               </Link>
+            </div>
+
+            {/* AI Insight Box */}
+            <div className="glass-card border-accent/20 p-8 rounded-[2.5rem] relative overflow-hidden group">
+              <div className="absolute right-4 top-4 text-accent/10 rotate-12 group-hover:rotate-0 transition-transform duration-500">
+                <Zap size={48} />
+              </div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-accent/10 rounded-full text-accent font-black text-[9px] uppercase tracking-[0.2em] mb-4">
+                <Zap size={10} />
+                <span>AI Insights</span>
+              </div>
+              <p className="text-slate-600 text-sm leading-relaxed font-medium">
+                Сегодня преобладает категория <span className="font-bold text-slate-900">"{stats.recentAppeals[0]?.classification || "Сервис"}"</span>. Рекомендуем обратить внимание на обучение персонала в филиале <span className="font-bold text-slate-900">{stats.topBranches[0]?.name || "Центральный"}</span>.
+              </p>
             </div>
           </div>
         )}
       </div>
     </div>
-  );
-}
-
-function StatCard({ title, value, icon: Icon, trend, trendUp, color = "text-[#1F2937]" }: any) {
-  return (
-    <motion.div 
-      whileHover={{ y: -5 }}
-      className="bg-white p-10 rounded-[3rem] border border-zinc-100 shadow-sm hover:shadow-xl transition-all duration-300 relative group overflow-hidden"
-    >
-      <div className="absolute -right-4 -bottom-4 opacity-[0.03] group-hover:scale-125 group-hover:rotate-12 transition-transform duration-700">
-        <Icon size={120} />
-      </div>
-
-      <div className="flex items-center justify-between mb-8 relative z-10">
-        <div className={cn("w-14 h-14 rounded-[1.25rem] bg-zinc-50 flex items-center justify-center shadow-inner", color)}>
-          <Icon size={28} />
-        </div>
-        {trend && (
-          <div className={cn("flex items-center gap-1 text-xs font-black", trendUp ? 'text-success' : 'text-error')}>
-            {trendUp ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-            {trend}
-          </div>
-        )}
-      </div>
-      <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-2 relative z-10">{title}</p>
-      <h4 className="text-5xl font-black tracking-tighter text-[#1F2937] relative z-10">{value}</h4>
-    </motion.div>
   );
 }

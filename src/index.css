@@ -1,45 +1,64 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Segoe UI", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   
-  --color-primary: #2F80ED;
-  --color-success: #27AE60;
+  --color-primary: #0F172A;
+  --color-accent: #3B82F6;
+  --color-success: #10B981;
   --color-warning: #F59E0B;
-  --color-error: #EB5757;
-  --color-background-app: #F9FAFB;
-  --color-text-main: #1F2937;
+  --color-error: #EF4444;
+  
+  --color-surface-50: #F8FAFC;
+  --color-surface-100: #F1F5F9;
+  --color-surface-200: #E2E8F0;
+  --color-surface-300: #CBD5E1;
+  
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
 }
 
 @layer base {
   body {
-    @apply bg-background-app text-text-main font-sans antialiased;
+    @apply bg-white text-slate-900 font-sans antialiased selection:bg-accent/20 selection:text-accent;
   }
   
   h1, h2, h3, h4, h5, h6 {
-    @apply text-text-main font-bold;
+    @apply text-slate-900 font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl shadow-slate-200/50;
+  }
+  
+  .premium-shadow {
+    @apply shadow-[0_8px_30px_rgb(0,0,0,0.04)];
+  }
+
+  .interactive-scale {
+    @apply transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98];
   }
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
+  width: 6px;
 }
-*{
-    text-decoration: none;
-    outline: none;
-    box-sizing: border-box;
-    list-style: none;
-}
+
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  @apply bg-transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 10px;
+  @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
+* {
+  text-decoration: none;
+  outline: none;
+  box-sizing: border-box;
+  list-style: none;
 }

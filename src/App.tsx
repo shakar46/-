@@ -50,6 +50,7 @@ interface SidebarItemProps {
 }
 
 // Pages
+import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Requests from "./pages/Requests";
 import RequestDetail from "./pages/RequestDetail";
@@ -68,19 +69,15 @@ import LearningBase from "./pages/LearningBase";
 import PerformanceStats from "./pages/PerformanceStats";
 import DictionaryManagement from "./pages/DictionaryManagement";
 import { Profile } from "./pages/Profile";
-
-
 import { Login } from "./pages/Login";
-
 import GiveFeedback from "./pages/GiveFeedback";
-
 
 const PageTransition = ({ children }: { children: React.ReactNode }) => (
   <motion.div
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     exit={{ opacity: 0, y: -10 }}
-    transition={{ duration: 0.2 }}
+    transition={{ duration: 0.3 }}
     className="w-full"
   >
     {children}
@@ -93,18 +90,18 @@ const SidebarItem = ({ to, icon: Icon, label, active }: SidebarItemProps) => {
     <Link
       to={to}
       className={cn(
-        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative",
+        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative",
         active 
-          ? "bg-primary text-white shadow-sm scale-100" 
-          : "text-zinc-500 hover:bg-zinc-100 hover:text-primary"
+          ? "bg-slate-900 text-white shadow-xl shadow-slate-200/50 scale-100" 
+          : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
       )}
     >
-      <Icon size={20} className={cn("transition-all", active ? "text-white" : "text-zinc-400 group-hover:text-primary")} />
-      <span className="font-semibold text-sm">{label}</span>
+      <Icon size={18} strokeWidth={active ? 2.5 : 2} className={cn("transition-all", active ? "text-white" : "text-slate-400 group-hover:text-slate-900")} />
+      <span className={cn("text-sm transition-all", active ? "font-bold tracking-tight" : "font-semibold")}>{label}</span>
       {active && (
         <motion.div 
           layoutId="active-pill" 
-          className="ml-auto w-1 h-4 rounded-full bg-white"
+          className="ml-auto w-1.5 h-1.5 rounded-full bg-accent"
         />
       )}
     </Link>
@@ -117,27 +114,26 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, userRole, userData, isAuthorized, loading: firebaseLoading, logout } = useFirebase();
 
+  // Pages that don't need the sidebar layout
+  const noLayoutPages = ["/form", "/landing", "/login"];
+  const isNoLayout = noLayoutPages.includes(location.pathname) || (!isAuthorized && location.pathname === "/");
+
   const menuItems = [];
   
-  // Dashboard for all except Operator
   if (userRole !== 'operator') {
     menuItems.push({ to: "/", icon: LayoutDashboard, label: "Обзор" });
   }
 
-  // Requests for all
   menuItems.push({ to: "/requests", icon: MessageSquare, label: "Запросы" });
 
-  // Новое (Quick Request) for Admin, Owner, Operator, Head
   if (userRole === 'owner' || userRole === 'admin' || userRole === 'operator' || userRole === 'head') {
     menuItems.push({ to: "/quick-request", icon: Plus, label: "Новое" });
   }
 
-  // Повторы (Repeating) for all except Operator
   if (userRole !== 'operator') {
     menuItems.push({ to: "/repeating", icon: Users, label: "Повторы" });
   }
 
-  // Решения, Скрипты, База обучения for Owner, Admin, Head, Operator
   if (userRole === 'owner' || userRole === 'admin' || userRole === 'head' || userRole === 'operator') {
     if (userRole !== 'operator') {
       menuItems.push({ to: "/resolutions", icon: ShieldCheck, label: "Решения" });
@@ -146,31 +142,25 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     menuItems.push({ to: "/learning-base", icon: FileText, label: "База обучения" });
   }
 
-  // Аналитика for Admin, Operator, Owner
   if (userRole === 'admin' || userRole === 'operator' || userRole === 'owner') {
     menuItems.push({ to: "/analytics", icon: BarChart3, label: "Аналитика" });
   }
 
-  // Дать ОС по отзыву for Manager
   if (userRole === 'manager') {
     menuItems.push({ to: "/give-feedback", icon: MessageCircle, label: "Дать ОС" });
   }
 
-  // Профиль, Инфо for all
   menuItems.push({ to: "/profile", icon: User, label: "Профиль" });
   menuItems.push({ to: "/how-to", icon: HelpCircle, label: "Инфо" });
 
-  // Продуктивность for Owner and Head
   if (userRole === "owner" || userRole === "head") {
     menuItems.push({ to: "/performance", icon: TrendingUp, label: "Продуктивность" });
   }
 
-  // Команда (Users) for Owner, Admin, Head
   if (userRole === "admin" || userRole === "owner" || userRole === 'head') {
     menuItems.push({ to: "/users", icon: Users, label: "Команда" });
   }
 
-  // Настройки and Справочники for Owner, Admin, Head
   if (userRole === "admin" || userRole === "owner" || userRole === "head") {
     menuItems.push({ to: "/dictionaries", icon: Book, label: "Справочники" });
     menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
@@ -185,64 +175,81 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   if (firebaseLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 font-segoe">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white font-sans">
         <motion.div 
           animate={{ scale: [1, 1.1, 1], rotate: [0, 90, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="w-16 h-16 bg-black rounded-3xl flex items-center justify-center shadow-xl shadow-black/10"
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          className="w-16 h-16 bg-slate-900 rounded-[24px] flex items-center justify-center shadow-2xl shadow-slate-200"
         >
           <ShieldCheck size={32} className="text-white" />
         </motion.div>
-        <p className="mt-8 text-zinc-900 font-black text-xl uppercase tracking-widest animate-pulse">CRM</p>
-        <p className="mt-2 text-zinc-400 font-bold text-sm tracking-tighter uppercase">Загрузка системы...</p>
+        <p className="mt-8 text-slate-900 font-black text-2xl uppercase tracking-[0.2em]">CRM</p>
+        <div className="mt-2 w-32 h-1 bg-slate-100 rounded-full overflow-hidden">
+          <motion.div 
+            animate={{ x: [-100, 100] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+            className="w-full h-full bg-accent"
+          />
+        </div>
       </div>
     );
   }
 
-  if (!isAuthorized && location.pathname !== "/form") {
-    return <Login />;
+  if (isNoLayout) {
+    return <main className="w-full min-h-screen">{children}</main>;
+  }
+
+  if (!isAuthorized) {
+    return <Landing />;
   }
 
   return (
-    <div className="flex min-h-screen bg-zinc-50 text-zinc-900 font-segoe">
-      {/* Sidebar - Standard, Non-floating */}
-      <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 bg-white border-r border-zinc-200">
+    <div className="flex min-h-screen bg-slate-50/50 text-slate-900 font-sans">
+      {/* Sidebar */}
+      <aside className="hidden lg:flex flex-col w-72 h-screen sticky top-0 bg-white border-r border-slate-100 p-8">
         <div className="flex flex-col h-full">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-10 px-2">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md shadow-primary/20 rotate-3 font-bold text-white text-xl">
-                Ш
-              </div>
-              <div>
-                <h1 className="font-bold text-lg leading-none tracking-tight">CRM</h1>
-                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mt-1">Feedback System</p>
-              </div>
+          <div className="flex items-center gap-3 mb-10 px-2 group cursor-pointer">
+            <motion.div 
+              whileHover={{ rotate: 12, scale: 1.1 }}
+              className="w-11 h-11 bg-slate-900 rounded-[14px] flex items-center justify-center shadow-xl shadow-slate-200 rotate-3 font-bold text-white text-xl"
+            >
+              Ш
+            </motion.div>
+            <div>
+              <h1 className="font-bold text-lg leading-none tracking-tight">CRM Feedback</h1>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5 opacity-60">Enterprise System</p>
             </div>
-
-            <nav className="flex flex-col gap-1 pr-1">
-              {menuItems.map((item) => (
-                <SidebarItem 
-                  key={item.to} 
-                  to={item.to}
-                  icon={item.icon}
-                  label={item.label}
-                  active={location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))} 
-                />
-              ))}
-            </nav>
           </div>
 
-          <div className="mt-auto p-6 border-t border-zinc-100">
-            <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-              <img 
-                src={user?.photoURL || `https://picsum.photos/seed/${user?.uid}/100/100`} 
-                alt="User" 
-                referrerPolicy="no-referrer"
-                className="w-10 h-10 rounded-lg object-cover border border-zinc-200"
+          <nav className="flex flex-col gap-1.5 flex-1 custom-scrollbar overflow-y-auto pr-2">
+            {menuItems.map((item) => (
+              <SidebarItem 
+                key={item.to} 
+                to={item.to}
+                icon={item.icon}
+                label={item.label}
+                active={location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))} 
               />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold truncate">{user?.displayName || "Operator"}</p>
-                <p className="text-[10px] text-primary font-bold uppercase tracking-wider">
+            ))}
+          </nav>
+
+          <footer className="mt-8 pt-6 border-t border-slate-100">
+            <button 
+              onClick={() => navigate('/profile')}
+              className="w-full flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-100 transition-all group"
+            >
+              <div className="relative">
+                <img 
+                  src={user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`} 
+                  alt="User" 
+                  referrerPolicy="no-referrer"
+                  className="w-10 h-10 rounded-xl object-cover border-2 border-white shadow-sm"
+                />
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-success border-2 border-white rounded-full" />
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-xs font-bold truncate group-hover:text-accent transition-colors">{user?.displayName || "Operator"}</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
                   {userRole === 'owner' ? 'Владелец' : 
                    userRole === 'head' ? 'Руководитель' :
                    userRole === 'admin' ? 'Админ' : 
@@ -252,33 +259,32 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </p>
               </div>
               <button 
-                onClick={handleLogout}
-                className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                onClick={(e) => { e.stopPropagation(); handleLogout(); }}
+                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
               >
                 <LogOut size={16} />
               </button>
-            </div>
-          </div>
+            </button>
+          </footer>
         </div>
       </aside>
 
-      {/* Mobile Header - Standard */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-zinc-200 h-16 px-6 flex items-center justify-between z-[100] shadow-sm">
+      {/* Mobile Nav */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b border-slate-100 h-20 px-6 flex items-center justify-between z-[100] shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md font-bold text-white text-xl">
+          <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg font-bold text-white text-xl">
             Ш
           </div>
-          <h1 className="font-bold text-lg tracking-tight">CRM</h1>
+          <h1 className="font-bold text-lg tracking-tight">CRM Feedback</h1>
         </div>
         <button 
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 text-zinc-600 hover:bg-zinc-100 rounded-lg transition-all"
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="p-2.5 text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-xl transition-all border border-slate-200"
         >
-          {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          <Menu size={22} />
         </button>
       </div>
 
-      {/* Mobile Menu Overlay */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <>
@@ -287,60 +293,63 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsMobileMenuOpen(false)}
-              className="lg:hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-[110]"
+              className="lg:hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110]"
             />
             <motion.div
-              initial={{ x: "-100%" }}
+              initial={{ x: "100%" }}
               animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              className="lg:hidden fixed inset-y-0 left-0 w-64 bg-white z-[120] p-6 flex flex-col shadow-2xl"
+              exit={{ x: "100%" }}
+              className="lg:hidden fixed inset-y-0 right-0 w-[85%] max-w-sm bg-white z-[120] p-8 flex flex-col shadow-2xl rounded-l-[40px]"
             >
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-bold">Меню</h2>
+              <div className="flex items-center justify-between mb-10">
+                <h2 className="text-2xl font-black tracking-tight">Навигация</h2>
                 <button 
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-2 text-zinc-400"
+                  className="p-2.5 bg-slate-50 rounded-xl text-slate-500"
                 >
                   <X size={24} />
                 </button>
               </div>
 
-              <nav className="flex flex-col gap-1 flex-1 overflow-y-auto">
+              <nav className="flex flex-col gap-2 flex-1 overflow-y-auto pr-2 custom-scrollbar">
                 {menuItems.map((item) => (
                   <Link
                     key={item.to}
                     to={item.to}
                     onClick={() => setIsMobileMenuOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 p-4 rounded-xl transition-all",
+                      "flex items-center gap-4 p-5 rounded-2xl transition-all border border-transparent",
                       location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))
-                        ? "bg-primary text-white shadow-md" 
-                        : "text-zinc-600 hover:bg-zinc-50"
+                        ? "bg-slate-900 text-white shadow-xl shadow-slate-900/20" 
+                        : "text-slate-600 hover:bg-slate-50 hover:border-slate-100"
                     )}
                   >
-                    <item.icon size={20} />
-                    <span className="text-base font-bold">{item.label}</span>
+                    <item.icon size={22} />
+                    <span className="text-[17px] font-bold">{item.label}</span>
                   </Link>
                 ))}
               </nav>
 
               <button
                 onClick={handleLogout}
-                className="mt-6 w-full flex items-center justify-center gap-3 bg-red-50 text-red-500 py-4 rounded-xl font-bold transition-all"
+                className="mt-8 w-full flex items-center justify-center gap-3 bg-red-50 text-red-500 py-5 rounded-[24px] font-bold transition-all active:scale-95"
               >
                 <LogOut size={20} />
-                Выйти
+                Выйти из системы
               </button>
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
-      {/* Main Content Area */}
-      <main className="flex-1 lg:p-10 p-6 pt-24 lg:pt-10 max-w-7xl mx-auto w-full min-h-screen overflow-hidden">
-        <AnimatePresence mode="wait">
-          {children}
-        </AnimatePresence>
+      <main className="flex-1 w-full relative">
+        <div className="max-w-6xl mx-auto px-6 lg:px-12 py-10 lg:py-16 pt-28 lg:pt-16">
+          <AnimatePresence mode="wait">
+            <PageTransition key={location.pathname}>
+              {children}
+            </PageTransition>
+          </AnimatePresence>
+        </div>
       </main>
     </div>
   );
@@ -353,24 +362,27 @@ export default function App() {
         <Router>
           <Layout>
             <Routes>
-              <Route path="/" element={<PageTransition><Dashboard /></PageTransition>} />
-              <Route path="/requests" element={<PageTransition><Requests /></PageTransition>} />
-              <Route path="/requests/:id" element={<PageTransition><RequestDetail /></PageTransition>} />
-              <Route path="/repeating" element={<PageTransition><RepeatingRequests /></PageTransition>} />
-              <Route path="/resolutions" element={<PageTransition><AcceptedResolutions /></PageTransition>} />
-              <Route path="/analytics" element={<PageTransition><Analytics /></PageTransition>} />
-              <Route path="/analytics/:type" element={<PageTransition><AnalyticsDetail /></PageTransition>} />
-              <Route path="/settings" element={<PageTransition><TelegramSettings /></PageTransition>} />
-              <Route path="/users" element={<PageTransition><UserManagement /></PageTransition>} />
-              <Route path="/quick-request" element={<PageTransition><QuickRequest /></PageTransition>} />
-              <Route path="/poisoning-request" element={<PageTransition><PoisoningRequest /></PageTransition>} />
-              <Route path="/scripts" element={<PageTransition><Scripts /></PageTransition>} />
-              <Route path="/learning-base" element={<PageTransition><LearningBase /></PageTransition>} />
-              <Route path="/performance" element={<PageTransition><PerformanceStats /></PageTransition>} />
-              <Route path="/dictionaries" element={<PageTransition><DictionaryManagement /></PageTransition>} />
-              <Route path="/profile" element={<PageTransition><Profile /></PageTransition>} />
-              <Route path="/how-to" element={<PageTransition><HowTo /></PageTransition>} />
-              <Route path="/give-feedback" element={<PageTransition><GiveFeedback /></PageTransition>} />
+              {/* If authorized, root is Dashboard, otherwise Landing */}
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/landing" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/requests" element={<Requests />} />
+              <Route path="/requests/:id" element={<RequestDetail />} />
+              <Route path="/repeating" element={<RepeatingRequests />} />
+              <Route path="/resolutions" element={<AcceptedResolutions />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/analytics/:type" element={<AnalyticsDetail />} />
+              <Route path="/settings" element={<TelegramSettings />} />
+              <Route path="/users" element={<UserManagement />} />
+              <Route path="/quick-request" element={<QuickRequest />} />
+              <Route path="/poisoning-request" element={<PoisoningRequest />} />
+              <Route path="/scripts" element={<Scripts />} />
+              <Route path="/learning-base" element={<LearningBase />} />
+              <Route path="/performance" element={<PerformanceStats />} />
+              <Route path="/dictionaries" element={<DictionaryManagement />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/how-to" element={<HowTo />} />
+              <Route path="/give-feedback" element={<GiveFeedback />} />
               <Route path="/form" element={<PublicForm />} />
             </Routes>
           </Layout>
