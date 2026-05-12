@@ -45,9 +45,10 @@ export default function Requests() {
   const itemsPerPage = 8;
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  const { userRole, userData } = useFirebase();
+  const { user, userRole, userData } = useFirebase();
 
   const fetchRequests = async () => {
+    if (!user) return;
     setLoading(true);
     try {
       const requestsQ = userRole === 'manager' && userData?.branchId
@@ -77,7 +78,7 @@ export default function Requests() {
 
   useEffect(() => {
     fetchRequests();
-  }, [userRole, userData?.branchId]);
+  }, [user, userRole, userData?.branchId]);
 
   const handleDelete = async (id: string) => {
     try {

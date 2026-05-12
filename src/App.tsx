@@ -125,7 +125,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   // Pages that don't need the sidebar layout
   const noLayoutPages = ["/form", "/landing", "/login"];
-  const isNoLayout = noLayoutPages.includes(location.pathname) || (!isAuthorized && location.pathname === "/");
+  const isNoLayout = noLayoutPages.includes(location.pathname);
 
   const menuItems = [];
   

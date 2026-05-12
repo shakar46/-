@@ -79,6 +79,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!user) return;
       try {
         const todayStart = startOfDay(new Date());
 
@@ -132,7 +133,7 @@ export default function Dashboard() {
       setLoading(false);
     };
     fetchData();
-  }, [userRole, userData?.branchId]);
+  }, [user, userRole, userData?.branchId]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
