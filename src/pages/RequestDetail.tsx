@@ -24,7 +24,7 @@ import {
   Info,
   X
 } from "lucide-react";
-import { doc, getDoc, collection, query, where, orderBy, getDocs, updateDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, orderBy, getDocs, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { useFirebase } from "../components/FirebaseProvider";
 import { motion, AnimatePresence } from "motion/react";
@@ -112,6 +112,11 @@ export default function RequestDetail() {
     if (!resolution) return alert("Введите решение");
     setProcessing(true);
     try {
+      const currentClassification = formData.classification || "Без категории";
+      const currentSection = Array.isArray(formData.classificationSection) 
+        ? formData.classificationSection.join(', ') 
+        : (formData.classificationSection || "Без раздела");
+
       const response = await fetch("/api/requests/process", {
         method: "POST",
         headers: { 
@@ -123,8 +128,8 @@ export default function RequestDetail() {
           instantFix,
           resolution,
           classificationConfirmed: classificationConfirmed.length > 0 
-            ? `${formData.classification} / ${classificationConfirmed.join(', ')}`
-            : `${formData.classification} / ${Array.isArray(formData.classificationSection) ? formData.classificationSection.join(', ') : formData.classificationSection}`
+            ? `${currentClassification} / ${classificationConfirmed.join(', ')}`
+            : `${currentClassification} / ${currentSection}`
         })
       });
       const result = await response.json();
@@ -184,7 +189,7 @@ export default function RequestDetail() {
     try {
       await updateDoc(doc(db, "requests", id), {
         [field]: value,
-        updatedAt: new Date().toISOString()
+        updatedAt: serverTimestamp()
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `requests/${id}`);
@@ -195,9 +200,13 @@ export default function RequestDetail() {
     if (!id || id === 'new') return;
     setSaving(true);
     try {
+      // Create a clean object for saving to Firestore
+      // We exclude fields that shouldn't be bulk-updated or need special handling
+      const { id: _, createdAt: __, updatedAt: ___, ...saveData } = formData;
+      
       await updateDoc(doc(db, "requests", id), {
-        ...formData,
-        updatedAt: new Date().toISOString()
+        ...saveData,
+        updatedAt: serverTimestamp()
       });
       alert("Данные успешно сохранены");
     } catch (error) {
@@ -250,7 +259,7 @@ export default function RequestDetail() {
     { id: "general", label: "Инфо", icon: Info },
     { id: "evidence", label: "Подтверждение", icon: ImageIcon },
     { id: "processing", label: "Обработка", icon: Zap },
-    { id: "analytics", label: "Аналитика", icon: FileText }
+    ...(userRole !== 'manager' ? [{ id: "analytics", label: "Аналитика", icon: FileText }] : [])
   ];
 
   return (
@@ -636,20 +645,51 @@ export default function RequestDetail() {
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Моментальная коррекция</label>
                     <textarea 
-                      disabled
-                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[120px] text-zinc-400"
-                      value={formData.instantCorrection || "Автоматически..."}
+                      disabled={!canEditProcessing || request.status === 'done'}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[120px] focus:ring-4 focus:ring-primary/5 transition-all disabled:text-zinc-400"
+                      value={formData.instantCorrection || instantFix || ""}
+                      onChange={(e) => {
+                        if (canEditProcessing) {
+                          setFormData({ ...formData, instantCorrection: e.target.value });
+                          setInstantFix(e.target.value);
+                        }
+                      }}
+                      placeholder="Опишите моментальные действия..."
                     />
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Решение</label>
                     <textarea 
-                      disabled
-                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[150px] text-zinc-400"
-                      value={formData.finalResolution || "Автоматически..."}
+                      disabled={!canEditProcessing || request.status === 'done'}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-3xl px-8 py-6 text-sm font-bold outline-none resize-none min-h-[150px] focus:ring-4 focus:ring-primary/5 transition-all disabled:text-zinc-400"
+                      value={formData.finalResolution || resolution || ""}
+                      onChange={(e) => {
+                        if (canEditProcessing) {
+                          setFormData({ ...formData, finalResolution: e.target.value });
+                          setResolution(e.target.value);
+                        }
+                      }}
+                      placeholder="Введите окончательное решение..."
                     />
                   </div>
+
+                  {canEditProcessing && request.status !== 'done' && (
+                    <div className="pt-6 flex justify-end">
+                      <button
+                        onClick={handleProcess}
+                        disabled={processing || (!resolution && !formData.finalResolution)}
+                        className="px-10 py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 flex items-center gap-3 disabled:opacity-50"
+                      >
+                        {processing ? (
+                          <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <Check size={18} />
+                        )}
+                        Отправить ОС / Применить решение
+                      </button>
+                    </div>
+                  )}
                 </section>
               </motion.div>
             )}

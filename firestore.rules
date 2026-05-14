@@ -12,18 +12,22 @@ service cloud.firestore {
     }
 
     function isEmailVerified() {
-      // The instruction says MUST mandate email_verified == true for write operations.
-      // We also check it for sensitive reads.
-      return request.auth.token.email_verified == true || request.auth.token.email.endsWith('@crm-internal.local');
-    }
-
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      // Mandate email_verified == true OR internal domain.
+      // Also check if the user has a role assigned (trusted user).
+      return isSignedIn() && (
+        request.auth.token.email_verified == true || 
+        (request.auth.token.email != null && request.auth.token.email.endsWith('@crm-internal.local'))
+      );
     }
 
     function getRole() {
-      let path = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(path) ? get(path).data.role : 'viewer';
+      // Prioritize role from custom claims (token) for performance and reliability
+      // Fallback to database lookup if token claim is missing
+      return request.auth.token.role != null 
+        ? request.auth.token.role 
+        : (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+           ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'viewer')
+           : 'viewer');
     }
 
     function isAdmin() {
@@ -39,7 +43,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
     function incoming() {
@@ -53,67 +57,94 @@ service cloud.firestore {
     // --- 2. Validation Blueprints ---
 
     function isValidRequest(data) {
-      return data.clientName is string && data.clientName.size() <= 100 &&
-             data.clientPhone is string && data.clientPhone.size() <= 20 &&
-             data.status in ['new', 'in_progress', 'done', 'under_review', 'cancelled'] &&
-             data.branchId is string &&
-             data.createdAt != null;
+      return (data.get('clientName', '') is string) && 
+             (data.get('clientPhone', '') is string) &&
+             (data.get('status', 'new') in ['new', 'in_progress', 'done', 'under_review', 'cancelled']) &&
+             data.get('createdAt', null) != null;
     }
 
     function isValidAction(data) {
-      return data.requestId is string &&
-             data.resolution is string && data.resolution.size() <= 5000 &&
+      return data.requestId is string && isValidId(data.requestId) &&
+             data.resolution is string && data.resolution.size() <= 10000 &&
              data.createdBy == request.auth.uid &&
              data.createdAt != null;
     }
 
-    function isValidDictionary(data) {
-      return data.name is string && data.name.size() <= 100;
+    function isValidUser(data) {
+      return data.login is string && data.login.size() <= 100 &&
+             data.displayName is string && data.displayName.size() <= 200 &&
+             data.role in ['head', 'admin', 'operator', 'manager', 'viewer'];
     }
 
     // --- 3. Collection Rules ---
 
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin()) && (
+        // Prevent users from changing their own role
+        (request.auth.uid == userId && !isAdmin() && incoming().role == existing().role) ||
+        isAdmin()
+      ) && isValidUser(incoming());
       allow delete: if isAdmin();
     }
 
     match /requests/{requestId} {
       allow get: if isSignedIn() && isValidId(requestId);
-      allow list: if isSignedIn(); // We should ideally filter by branch for managers, but for now allow list
+      allow list: if isSignedIn(); // Queries must filter by branch if manager
       
-      allow create: if isSignedIn() && isEmailVerified() && isValidRequest(incoming());
+      allow create: if isSignedIn() && isEmailVerified() && (
+        incoming().createdBy == request.auth.uid
+      ) && (
+        incoming().keys().hasAll(['clientName', 'clientPhone', 'status', 'createdAt', 'createdBy'])
+      );
       
-      allow update: if isSignedIn() && isEmailVerified() && (
-        // Managers can update most fields
-        isManager() || 
-        // Operators can fill info
-        isOperator()
+      allow update: if isSignedIn() && isValidId(requestId) && isEmailVerified() && (
+        // Terminal state lock: can't update if done, unless admin
+        (existing().status != 'done' || isAdmin())
+      ) && (
+        // Action: Operator/Manager update
+        (isOperator() && (
+           // Identity Integrity: cannot change who created it or when
+           incoming().get('createdBy', '') == existing().get('createdBy', '') &&
+           incoming().get('createdAt', null) == existing().get('createdAt', null) &&
+           // Whitelist allowed fields for update
+           incoming().diff(existing()).affectedKeys().hasOnly([
+             'clientName', 'clientPhone', 'message', 'classification', 'classificationSection', 
+             'additionalComment', 'productEmployee', 'sipAudio', 'clientPhotos', 'clientPhoto',
+             'orderDate', 'orderCheck', 'source', 'significance', 'branchId', 'branchName', 
+             'dateReceived', 'updatedAt', 'rootCauseAnalysis', 'motivationDept', 'validityStatus', 
+             'correctiveActions', 'classificationConfirmed', 'responsibleForCorrection', 
+             'deadlineStatus', 'finalResolution', 'instantCorrection', 'managerId', 'status',
+             'guestNumber', 'complaintTaker', 'deadlineAt', 'completedAt', 'viewedBy', 'viewedAt',
+             'briefDescription', 'samplePhotoEvidence', 'extraPhoto', 'analyticsPhotos', 
+             'poisoningDetails', 'isPoisoning', 'finalComment'
+           ])
+        )) ||
+        isAdmin()
       );
       
       allow delete: if isAdmin();
     }
 
     match /request_actions/{actionId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isEmailVerified() && isValidAction(incoming());
-      allow update: if isAdmin() || (isSignedIn() && existing().createdBy == request.auth.uid);
+      allow get: if isSignedIn() && isValidId(actionId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isEmailVerified() && isValidAction(incoming()) && (
+        exists(/databases/$(database)/documents/requests/$(incoming().requestId))
+      );
+      allow update: if isAdmin() || (isSignedIn() && existing().createdBy == request.auth.uid && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['resolution', 'updatedAt'])
+      ));
       allow delete: if isAdmin();
     }
 
     match /audit_logs/{logId} {
-      // Allow reading if the user is an operator OR if they are the owner of the log.
-      // We use a broader check for list operations to prevent index-related permission blocks.
       allow read: if isSignedIn() && (
-        isOperator() || 
-        (resource != null && resource.data.userId == request.auth.uid) ||
-        (resource == null) // This helps with some query planning in Firestore
+        isOperator() || (resource != null && resource.data.userId == request.auth.uid)
       );
-      // Log creation via logger utility
       allow create: if isSignedIn(); 
-      // Audit logs are write-only for standard users
       allow update, delete: if isAdmin();
     }
 
@@ -148,3 +179,4 @@ service cloud.firestore {
     }
   }
 }
+

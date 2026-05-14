@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFirebase } from '../components/FirebaseProvider';
 import { LogIn, Lock, User, AlertCircle, ShieldCheck } from 'lucide-react';
@@ -6,6 +7,7 @@ import { cn } from '../lib/utils';
 
 export const Login = () => {
   const { login } = useFirebase();
+  const navigate = useNavigate();
   const [loginName, setLoginName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -22,8 +24,10 @@ export const Login = () => {
     setError(null);
     try {
       await login(loginName, password);
+      // Automatic redirect to Overview (Dashboard)
+      navigate('/');
     } catch (err: any) {
-      setError(err.message || "Ошибка входа. Проверьте данные.");
+      setError("Неверный логин или пароль");
     } finally {
       setLoading(false);
     }

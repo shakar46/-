@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Plus,
   Clock,
-  History
+  History,
+  ShieldAlert
 } from "lucide-react";
 import { format, subDays, addDays, startOfDay, endOfDay, isWithinInterval, startOfWeek, startOfMonth, startOfYear, subWeeks, subMonths, subYears, eachDayOfInterval } from "date-fns";
 import * as XLSX from "xlsx";
@@ -157,6 +158,18 @@ export default function Analytics() {
 
   const [dictionaries, setDictionaries] = useState<Record<string, any>>({});
   const { userRole, userData } = useFirebase();
+
+  if (userRole === 'manager') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mb-6">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Доступ ограничен</h2>
+        <p className="text-zinc-500 text-sm max-w-md">Раздел общей аналитики доступен только руководителям и администраторам.</p>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const fetchData = async () => {

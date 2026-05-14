@@ -129,50 +129,57 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   const menuItems = [];
   
-  if (userRole !== 'operator') {
+  // Manager items: Dashboard, Requests, Give Feedback, Profile, Info
+  if (userRole === 'manager') {
     menuItems.push({ to: "/", icon: LayoutDashboard, label: "Обзор" });
-  }
-
-  menuItems.push({ to: "/requests", icon: MessageSquare, label: "Запросы" });
-
-  if (userRole === 'owner' || userRole === 'admin' || userRole === 'operator' || userRole === 'head' || userRole === 'manager') {
-    menuItems.push({ to: "/quick-request", icon: Plus, label: "Новое" });
-  }
-
-  if (userRole !== 'operator') {
-    menuItems.push({ to: "/repeating", icon: Users, label: "Повторы" });
-  }
-
-  if (userRole === 'owner' || userRole === 'admin' || userRole === 'head' || userRole === 'operator') {
-    if (userRole !== 'operator') {
-      menuItems.push({ to: "/resolutions", icon: ShieldCheck, label: "Решения" });
-    }
-    menuItems.push({ to: "/scripts", icon: Zap, label: "Скрипты" });
-    menuItems.push({ to: "/learning-base", icon: FileText, label: "База обучения" });
-  }
-
-  if (userRole === 'admin' || userRole === 'operator' || userRole === 'owner' || userRole === 'head') {
-    menuItems.push({ to: "/analytics", icon: BarChart3, label: "Аналитика" });
-  }
-
-  if (userRole === 'manager' || userRole === 'head') {
+    menuItems.push({ to: "/requests", icon: MessageSquare, label: "Запросы" });
     menuItems.push({ to: "/give-feedback", icon: MessageCircle, label: "Дать ОС" });
-  }
+    menuItems.push({ to: "/profile", icon: User, label: "Профиль" });
+    menuItems.push({ to: "/how-to", icon: HelpCircle, label: "Инфо" });
+  } else {
+    // Other roles logic
+    if (userRole !== 'operator') {
+      menuItems.push({ to: "/", icon: LayoutDashboard, label: "Обзор" });
+    }
 
-  menuItems.push({ to: "/profile", icon: User, label: "Профиль" });
-  menuItems.push({ to: "/how-to", icon: HelpCircle, label: "Инфо" });
+    menuItems.push({ to: "/requests", icon: MessageSquare, label: "Запросы" });
 
-  if (userRole === "owner" || userRole === "head") {
-    menuItems.push({ to: "/performance", icon: TrendingUp, label: "Продуктивность" });
-  }
+    if (userRole === 'owner' || userRole === 'admin' || userRole === 'operator' || userRole === 'head') {
+      menuItems.push({ to: "/quick-request", icon: Plus, label: "Новое" });
+    }
 
-  if (userRole === "admin" || userRole === "owner" || userRole === 'head') {
-    menuItems.push({ to: "/users", icon: Users, label: "Команда" });
-  }
+    if (userRole !== 'operator') {
+      menuItems.push({ to: "/repeating", icon: Users, label: "Повторы" });
+    }
 
-  if (userRole === "admin" || userRole === "owner" || userRole === "head") {
-    menuItems.push({ to: "/dictionaries", icon: Book, label: "Справочники" });
-    menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
+    if (userRole === 'owner' || userRole === 'admin' || userRole === 'head' || userRole === 'operator') {
+      if (userRole !== 'operator') {
+        menuItems.push({ to: "/resolutions", icon: ShieldCheck, label: "Решения" });
+      }
+      menuItems.push({ to: "/scripts", icon: Zap, label: "Скрипты" });
+      menuItems.push({ to: "/learning-base", icon: FileText, label: "База обучения" });
+    }
+
+    if (userRole === 'admin' || userRole === 'operator' || userRole === 'owner' || userRole === 'head') {
+      menuItems.push({ to: "/analytics", icon: BarChart3, label: "Аналитика" });
+    }
+
+    if (userRole === 'head') {
+      menuItems.push({ to: "/give-feedback", icon: MessageCircle, label: "Дать ОС" });
+    }
+
+    menuItems.push({ to: "/profile", icon: User, label: "Профиль" });
+    menuItems.push({ to: "/how-to", icon: HelpCircle, label: "Инфо" });
+
+    if (userRole === "owner" || userRole === "head") {
+      menuItems.push({ to: "/performance", icon: TrendingUp, label: "Продуктивность" });
+    }
+
+    if (userRole === "admin" || userRole === "owner" || userRole === 'head') {
+      menuItems.push({ to: "/users", icon: Users, label: "Команда" });
+      menuItems.push({ to: "/dictionaries", icon: Book, label: "Справочники" });
+      menuItems.push({ to: "/settings", icon: Settings, label: "Настройки" });
+    }
   }
 
   const handleLogout = () => {

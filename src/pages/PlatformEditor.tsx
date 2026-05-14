@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { Settings, Plus, Trash2, Move, Layout, Database, Code, Save } from "lucide-react";
+import { Settings, Plus, Trash2, Move, Layout, Database, Code, Save, ShieldAlert } from "lucide-react";
 import { motion } from "motion/react";
+import { useFirebase } from "../components/FirebaseProvider";
 
 export default function PlatformEditor() {
+  const { userRole } = useFirebase();
   const [elements, setElements] = useState([
     { id: 1, name: "Dashboard", type: "page", status: "active" },
     { id: 2, name: "Appeals List", type: "component", status: "active" },
@@ -10,6 +12,18 @@ export default function PlatformEditor() {
     { id: 4, name: "Analytics Engine", type: "backend", status: "active" },
     { id: 5, name: "Google Sync", type: "integration", status: "active" },
   ]);
+
+  if (userRole !== 'admin' && userRole !== 'owner' && userRole !== 'head') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mb-6">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Доступ запрещен</h2>
+        <p className="text-zinc-500">Только администраторы могут редактировать платформу.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

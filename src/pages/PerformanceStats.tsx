@@ -21,8 +21,11 @@ import { startOfDay, endOfDay, isWithinInterval, subDays, startOfMonth, startOfW
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
 import { convertToDate, safeFormat } from "../utils/dateUtils";
+import { useFirebase } from "../components/FirebaseProvider";
+import { ShieldAlert } from "lucide-react";
 
 const PerformanceStats = () => {
+  const { userRole } = useFirebase();
   const [appeals, setAppeals] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -30,6 +33,18 @@ const PerformanceStats = () => {
   const [period, setPeriod] = useState("week");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  if (userRole === 'manager') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mb-6">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Доступ ограничен</h2>
+        <p className="text-zinc-500">Раздел статистики эффективности доступен только руководителям.</p>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const fetchData = async () => {

@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
-import { Save, Bell, BellOff, Send, ShieldCheck, History } from "lucide-react";
+import { useFirebase } from "../components/FirebaseProvider";
+import { Save, Bell, BellOff, Send, ShieldCheck, History, ShieldAlert } from "lucide-react";
 import { motion } from "motion/react";
 
 export default function TelegramSettings() {
+  const { userRole } = useFirebase();
   const [settings, setSettings] = useState({
     telegram_token: "",
     telegram_chat_id: "",
@@ -18,6 +20,18 @@ export default function TelegramSettings() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [testStatus, setTestStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+
+  if (userRole !== 'admin' && userRole !== 'owner' && userRole !== 'head') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center mb-6">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Доступ запрещен</h2>
+        <p className="text-zinc-500">Только администраторы могут настраивать уведомления.</p>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (saveStatus !== "idle") {
