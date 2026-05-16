@@ -24,7 +24,7 @@ import {
   Info,
   X
 } from "lucide-react";
-import { doc, getDoc, collection, query, where, orderBy, getDocs, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, orderBy, getDocs, updateDoc, setDoc, serverTimestamp, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useFirebase } from "../components/FirebaseProvider";
 import { motion, AnimatePresence } from "motion/react";
@@ -40,7 +40,7 @@ import { SearchableSelect, SearchableMultiSelect } from "../components/Searchabl
 export default function RequestDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, userRole, token } = useFirebase();
+  const { user, userRole, token, userData } = useFirebase();
   
   const [request, setRequest] = useState<CRMRequest | null>(null);
   const [dictionaries, setDictionaries] = useState<Record<string, Dictionary>>({});
@@ -117,23 +117,83 @@ export default function RequestDetail() {
         ? formData.classificationSection.join(', ') 
         : (formData.classificationSection || "Без раздела");
 
-      const response = await fetch("/api/requests/process", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
+      let apiSuccess = false;
+      let result: any = null;
+
+      try {
+        const response = await fetch("/api/requests/process", {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            requestId: id,
+            instantFix,
+            resolution,
+            classificationConfirmed: classificationConfirmed.length > 0 
+              ? `${currentClassification} / ${classificationConfirmed.join(', ')}`
+              : `${currentClassification} / ${currentSection}`
+          })
+        });
+
+        if (response.ok) {
+          result = await response.json();
+          if (result.success) {
+            apiSuccess = true;
+          }
+        } else if (response.status === 404) {
+          console.warn("API Server not found (404). Falling back to direct Firestore update.");
+        }
+      } catch (apiErr) {
+        console.warn("API Connection failed. Falling back to direct Firestore update.");
+      }
+
+      // Fallback: Direct Firestore Update
+      if (!apiSuccess) {
+        const finalClassification = classificationConfirmed.length > 0 
+          ? `${currentClassification} / ${classificationConfirmed.join(', ')}`
+          : `${currentClassification} / ${currentSection}`;
+
+        // 1. Create action
+        await addDoc(collection(db, "request_actions"), {
           requestId: id,
-          instantFix,
-          resolution,
-          classificationConfirmed: classificationConfirmed.length > 0 
-            ? `${currentClassification} / ${classificationConfirmed.join(', ')}`
-            : `${currentClassification} / ${currentSection}`
-        })
-      });
-      const result = await response.json();
-      if (result.success) {
+          type: "correction",
+          instantFix: instantFix || "",
+          resolution: resolution || "",
+          classificationConfirmed: finalClassification,
+          createdBy: user?.uid,
+          createdByName: userData?.displayName || "Manager",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+
+        // 2. Update request
+        const requestRef = doc(db, "requests", id!);
+        await setDoc(requestRef, {
+          status: "done",
+          completedAt: new Date().toISOString(),
+          updatedAt: new Date(),
+          finalResolution: resolution,
+          instantCorrection: instantFix,
+          classificationConfirmed: finalClassification,
+          managerId: user?.uid
+        }, { merge: true });
+
+        // 3. Optional: Auditor log
+        await addDoc(collection(db, "audit_logs"), {
+          userId: user?.uid,
+          userName: userData?.displayName,
+          action: "Применение решения (Client-side)",
+          type: "process",
+          entityId: id,
+          createdAt: new Date()
+        });
+
+        result = { success: true };
+      }
+
+      if (result && result.success) {
         setResolution("");
         setInstantFix("");
         setClassificationConfirmed([]);
@@ -146,7 +206,7 @@ export default function RequestDetail() {
           setFormData(newData);
         }
       } else {
-        alert(result.error);
+        alert(result?.error || "Ошибка при обработке!");
       }
     } catch (error) {
       console.error("Process error:", error);

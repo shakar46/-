@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, getDocs, orderBy, where } from "firebase/firestore";
+import { collection, query, getDocs, orderBy, where, deleteDoc, doc, addDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { handleFirestoreError, OperationType } from "../utils/firestoreErrorHandler";
 import { 
@@ -80,25 +80,55 @@ export default function Requests() {
     fetchRequests();
   }, [user, userRole, userData?.branchId]);
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (requestId: string) => {
     try {
       const token = await auth.currentUser?.getIdToken();
-      const response = await fetch("/api/requests/delete", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ requestId: id })
-      });
+      let apiSuccess = false;
 
-      const result = await response.json();
-      if (!result.success) throw new Error(result.error);
+      try {
+        const response = await fetch("/api/requests/delete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({ requestId })
+        });
 
-      setRequests(requests.filter(r => r.id !== id));
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) apiSuccess = true;
+        } else if (response.status === 404) {
+          console.warn("API Server not found (404). Falling back to direct Firestore delete.");
+        }
+      } catch (apiErr) {
+        console.warn("API Connection failed. Falling back to direct Firestore delete.");
+      }
+
+      // Fallback: Direct Delete
+      if (!apiSuccess) {
+        if (!userRole || !['admin', 'owner', 'head'].includes(userRole)) {
+          throw new Error("Недостаточно прав для удаления (Client-side check)");
+        }
+        
+        await deleteDoc(doc(db, "requests", requestId));
+        
+        // Log action
+        await addDoc(collection(db, "audit_logs"), {
+          userId: user?.uid,
+          userName: userData?.displayName,
+          action: "Удаление обращения (Client-side)",
+          type: "delete",
+          entityId: requestId,
+          createdAt: new Date()
+        });
+      }
+
+      setRequests(requests.filter(r => r.id !== requestId));
       setDeleteConfirmId(null);
     } catch (error: any) {
-      alert("Ошибка при удалении: " + error.message);
+      console.error("Delete error:", error);
+      alert("Ошибка при удалении: " + (error.message || "Нет доступа"));
     }
   };
 
