@@ -89,35 +89,84 @@ export default function QuickRequest() {
     setLoading(true);
     setStatus("idle");
     try {
-      const response = await fetch("/api/requests/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
+      let result: any = null;
+      let apiSuccess = false;
+
+      try {
+        const response = await fetch("/api/requests/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            clientName: formData.client_name,
+            clientPhone: formData.client_phone,
+            clientPhotos: formData.complaint_photos,
+            message: formData.complaint_text,
+            significance: formData.complaint_status,
+            branchId: formData.branch_name,
+            orderCheck: formData.orderCheck
+          })
+        });
+
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          result = await response.json();
+          if (response.ok && result.success) {
+            apiSuccess = true;
+          }
+        } else if (response.status === 404) {
+          console.warn("API Server not found (404). Falling back to direct Firestore write.");
+        } else {
+          const text = await response.text();
+          console.error("Non-JSON response:", text);
+        }
+      } catch (apiErr) {
+        console.warn("API Connection failed. Falling back to direct Firestore write.", apiErr);
+      }
+
+      // Fallback to direct Firestore write if API failed or returned 404
+      if (!apiSuccess) {
+        const timestamp = Date.now().toString().slice(-6);
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        const guestNumber = `G-${timestamp}-${random}`;
+
+        const requestData = {
+          guestNumber,
           clientName: formData.client_name,
           clientPhone: formData.client_phone,
           clientPhotos: formData.complaint_photos,
+          clientPhoto: formData.complaint_photos.length > 0 ? formData.complaint_photos[0] : null,
           message: formData.complaint_text,
-          significance: formData.complaint_status,
           branchId: formData.branch_name,
-          orderCheck: formData.orderCheck
-        })
-      });
+          status: "in_progress",
+          createdBy: user?.uid || "system",
+          complaintTaker: user?.displayName || "Operator",
+          dateReceived: new Date().toISOString(),
+          orderCheck: formData.orderCheck,
+          source: "Direct",
+          significance: formData.complaint_status,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          validityStatus: "выявляется"
+        };
 
-      let result;
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        result = await response.json();
-      } else {
-        const text = await response.text();
-        console.error("Non-JSON response:", text);
-        throw new Error(`Server returned non-JSON response (${response.status})`);
+        const docRef = await addDoc(collection(db, "requests"), requestData);
+        result = { success: true, id: docRef.id, guestNumber };
+        
+        // Client-side Telegram notification
+        await sendTelegramMessage(
+          `<b>🆕 Новое обращение (Client-side): ${guestNumber}</b>\n` +
+          `<b>👤 Клиент:</b> ${formData.client_name}\n` +
+          `<b>📍 Филиал:</b> ${formData.branch_name}\n` +
+          `<b>📝 Сообщение:</b> ${formData.complaint_text}`,
+          'main'
+        );
       }
 
-      if (!result.success) {
-        throw new Error(result.error || "Failed to create request");
+      if (!result || !result.success) {
+        throw new Error(result?.error || "Failed to create request");
       }
       
       setStatus("success");

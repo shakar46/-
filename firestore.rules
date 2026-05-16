@@ -13,10 +13,11 @@ service cloud.firestore {
 
     function isEmailVerified() {
       // Mandate email_verified == true OR internal domain.
-      // Also check if the user has a role assigned (trusted user).
+      // Also allow anonymous users for public form submissions.
       return isSignedIn() && (
         request.auth.token.email_verified == true || 
-        (request.auth.token.email != null && request.auth.token.email.endsWith('@crm-internal.local'))
+        (request.auth.token.email != null && request.auth.token.email.endsWith('@crm-internal.local')) ||
+        request.auth.token.firebase.sign_in_provider == 'anonymous'
       );
     }
 

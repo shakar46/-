@@ -40,33 +40,71 @@ export default function PublicForm() {
     e.preventDefault();
     setLoading(true);
     try {
-      // Use API for consistency and automatic notifications
-      const response = await fetch("/api/requests/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${await auth.currentUser?.getIdToken()}`
-        },
-        body: JSON.stringify({
+      let result: any = null;
+      let apiSuccess = false;
+
+      try {
+        const response = await fetch("/api/requests/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${await auth.currentUser?.getIdToken()}`
+          },
+          body: JSON.stringify({
+            clientName: formData.client_name,
+            clientPhone: formData.client_phone,
+            branchId: formData.branch_name,
+            message: formData.complaint_text,
+            source: "website"
+          })
+        });
+
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          result = await response.json();
+          if (response.ok && result.success) {
+            apiSuccess = true;
+          }
+        } else if (response.status === 404) {
+          console.warn("API Server not found (404). Falling back to direct Firestore write.");
+        }
+      } catch (apiErr) {
+        console.warn("API Connection failed. Falling back to direct Firestore.");
+      }
+
+      // Fallback
+      if (!apiSuccess) {
+        const timestamp = Date.now().toString().slice(-6);
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        const guestNumber = `G-${timestamp}-${random}`;
+
+        const docRef = await addDoc(collection(db, "requests"), {
+          guestNumber,
           clientName: formData.client_name,
           clientPhone: formData.client_phone,
           branchId: formData.branch_name,
           message: formData.complaint_text,
-          source: "website"
-        })
-      });
+          status: "in_progress",
+          createdBy: "public",
+          complaintTaker: "Website",
+          dateReceived: new Date().toISOString(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          source: "website",
+          significance: "Средняя"
+        });
+        result = { success: true, id: docRef.id, guestNumber };
 
-      let result;
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        result = await response.json();
-      } else {
-        const text = await response.text();
-        console.error("Non-JSON response from public form:", text);
-        throw new Error(`Server returned non-JSON response (${response.status})`);
+        // Client-side TG for public form
+        await sendTelegramMessage(
+          `<b>🌐 Новое обращение с сайта (Client-side): ${guestNumber}</b>\n` +
+          `<b>👤 Клиент:</b> ${formData.client_name}\n` +
+          `<b>📝 Сообщение:</b> ${formData.complaint_text}`,
+          'main'
+        );
       }
 
-      if (!result.success) throw new Error(result.error || "Failed to create public request");
+      if (!result || !result.success) throw new Error(result?.error || "Failed to create public request");
 
       const appealId = result.id;
 

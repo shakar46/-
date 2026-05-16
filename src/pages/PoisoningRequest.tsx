@@ -64,21 +64,75 @@ export default function PoisoningAppeal() {
     setLoading(true);
     setStatus("idle");
     try {
-      const response = await fetch("/api/requests/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
+      let result: any = null;
+      let apiSuccess = false;
+
+      try {
+        const response = await fetch("/api/requests/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            clientName: formData.client_name,
+            clientPhone: formData.client_phone,
+            branchId: formData.branch_name,
+            message: `ЖАЛОБА НА ОТРАВЛЕНИЕ: ${formData.symptoms}. Подозрительные продукты: ${formData.suspected_ingredients}. Ели/заболели: ${formData.people_consumed}/${formData.people_symptoms}`,
+            significance: "Критическая",
+            classification: "Отравление",
+            classificationSection: "Пищевая безопасность",
+            // Extra payload for poisoning
+            poisoningDetails: {
+              symptoms: formData.symptoms,
+              duration: formData.duration,
+              peopleConsumed: formData.people_consumed,
+              peopleSymptoms: formData.people_symptoms,
+              stomachState: formData.stomach_state,
+              timeAfterConsumption: formData.time_after_consumption,
+              suspectedIngredients: formData.suspected_ingredients,
+              previousCases: formData.previous_cases,
+              medicalReport: formData.medical_report,
+              isAggressive: formData.is_aggressive
+            }
+          })
+        });
+
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          result = await response.json();
+          if (response.ok && result.success) {
+            apiSuccess = true;
+          }
+        } else if (response.status === 404) {
+          console.warn("API Server not found (404). Falling back to direct Firestore write.");
+        }
+      } catch (apiErr) {
+        console.warn("API Connection failed. Falling back to direct Firestore.");
+      }
+
+      // Fallback
+      if (!apiSuccess) {
+        const timestamp = Date.now().toString().slice(-6);
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        const guestNumber = `G-${timestamp}-${random}`;
+
+        const docRef = await addDoc(collection(db, "requests"), {
+          guestNumber,
           clientName: formData.client_name,
           clientPhone: formData.client_phone,
           branchId: formData.branch_name,
-          message: `ЖАЛОБА НА ОТРАВЛЕНИЕ: ${formData.symptoms}. Подозрительные продукты: ${formData.suspected_ingredients}. Ели/заболели: ${formData.people_consumed}/${formData.people_symptoms}`,
+          message: `ЖАЛОБА НА ОТРАВЛЕНИЕ: ${formData.symptoms}`,
+          status: "in_progress",
+          createdBy: user?.uid || "system",
+          complaintTaker: user?.displayName || "Operator",
+          dateReceived: new Date().toISOString(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
           significance: "Критическая",
           classification: "Отравление",
           classificationSection: "Пищевая безопасность",
-          // Extra payload for poisoning
+          isPoisoning: true,
           poisoningDetails: {
             symptoms: formData.symptoms,
             duration: formData.duration,
@@ -91,20 +145,21 @@ export default function PoisoningAppeal() {
             medicalReport: formData.medical_report,
             isAggressive: formData.is_aggressive
           }
-        })
-      });
+        });
+        result = { success: true, id: docRef.id, guestNumber };
 
-      let result;
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        result = await response.json();
-      } else {
-        const text = await response.text();
-        console.error("Non-JSON response:", text);
-        throw new Error(`Server returned non-JSON response (${response.status})`);
+        // Client-side TG for poisoning
+        await sendTelegramMessage(
+          `🚨 <b>ОБРАЩЕНИЕ ПО ОТРАВЛЕНИЮ (Client-side)</b> 🚨\n\n` +
+          `👤 Клиент: ${formData.client_name}\n` +
+          `📞 Телефон: ${formData.client_phone}\n` +
+          `📍 Филиал: ${formData.branch_name}\n` +
+          `🤢 Симптомы: ${formData.symptoms}`,
+          'main'
+        );
       }
 
-      if (!result.success) throw new Error(result.error || "Failed to create poisoning request");
+      if (!result || !result.success) throw new Error(result?.error || "Failed to create poisoning request");
       
       const appealId = result.id;
       
